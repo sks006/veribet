@@ -15,7 +15,8 @@ dotenv.config();
 const RPC_URL = process.env.RPC_URL || 'https://api.devnet.solana.com';
 const PROGRAM_ID = process.env.PROGRAM_ID || '2Syq46YQQ4iGbCouFYxjeHEcABScMd669NAK5XrxZFWG';
 const AUTHORITY_KEY_PATH = process.env.AUTHORITY_KEY_PATH || './authority-keypair.json';
-const TXLINE_URL = process.env.TXLINE_URL || 'https://txline-dev.txodds.com/stream';
+const txlineBase = process.env.TXLINE_API_ORIGIN || 'https://txline-dev.txodds.com';
+const TXLINE_URL = process.env.TXLINE_URL || `${txlineBase}/api/scores/stream`;
 const ORACLE_PUBLIC_KEY = process.env.ORACLE_PUBLIC_KEY || 'mock';
 
 function loadKeypair(path: string): Keypair {
@@ -46,7 +47,7 @@ async function main() {
   // Set up connection for scanning
   const connection = new anchor.web3.Connection(RPC_URL, 'confirmed');
   const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(authorityKeypair), { commitment: 'confirmed' });
-  const program = new anchor.Program(idlJson as any, provider);
+  const program = new anchor.Program(idlJson as any, provider) as any;
 
   // Try to load API token from txline-config.json
   let apiToken = process.env.TXLINE_API_TOKEN || '';
@@ -73,10 +74,20 @@ async function main() {
     console.error('[Crank Main] Error loading saved token:', e.message);
   }
 
-  const headers: Record<string, string> = {};
-  if (apiToken) {
+  const headers: Record<string, string> = {
+    'Accept': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Authorization': `Bearer ${process.env.TXLINE_GUEST_JWT || ''}`,
+    'X-Api-Token': process.env.TXLINE_ACTIVATED_TOKEN || apiToken
+  };
+
+  if (!process.env.TXLINE_GUEST_JWT && apiToken) {
     headers['Authorization'] = `Bearer ${apiToken}`;
-    headers['x-api-key'] = apiToken;
+  }
+
+  if (process.env.TXLINE_ACTIVATED_TOKEN || apiToken) {
+    headers['x-api-key'] = process.env.TXLINE_ACTIVATED_TOKEN || apiToken;
   }
 
   // Set up SSE client
@@ -103,7 +114,7 @@ async function main() {
 
       // Scan all markets on-chain for the match ID
       const allMarkets = await program.account.parametricMarket.all();
-      const matched = allMarkets.filter((market) => {
+      const matched = allMarkets.filter((market: any) => {
         const matchIdStr = Buffer.from(market.account.matchIdBytes)
           .toString('utf8')
           .replace(/\0/g, ''); // strip trailing null bytes

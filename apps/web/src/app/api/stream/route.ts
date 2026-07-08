@@ -4,271 +4,98 @@ import * as https from 'https';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// -------------------------------------------------------------
+// Type Schemas & Environment Isolation Layer
+// -------------------------------------------------------------
+
+export interface TxLineEnvironment {
+  targetNetwork: 'mainnet' | 'devnet';
+  apiOrigin: string; // Must strictly match the targetNetwork
+  apiToken: string;  // Retrieved from /api/token/activate or config
+  jwt: string;       // Retrieved from /auth/guest/start
+}
+
+type FixtureIdentifier = string;
+
+interface ScoreState {
+  homeScore: number;
+  awayScore: number;
+}
+
+interface FixtureState {
+  id: FixtureIdentifier;
+  statusId: number; // Mapped directly from TxOdds Game Phase StatusId
+  scores: ScoreState;
+  totalStats: number;
+  lastTickTimestamp: number;
+  homeTeam?: string;
+  awayTeam?: string;
+  sport?: string;
+  kickoffTime?: number;
+}
+
+// -------------------------------------------------------------
+// Global States
+// -------------------------------------------------------------
+
 const clients = new Set<ReadableStreamDefaultController>();
 let txlineConnectionActive = false;
-
-// Mock matches fallback data for simulation
-let matchesSimulated = [
-  { id: 'ARG-FRA-WC26', homeTeam: 'Argentina 🇦🇷', awayTeam: 'France 🇫🇷', status: 'LIVE', homeScore: 2, awayScore: 2, totalStats: 4, kickoffTime: Date.now() - 2700000, sport: 'World Cup 🏆' },
-  { id: 'BRA-GER-WC26', homeTeam: 'Brazil 🇧🇷', awayTeam: 'Germany 🇩🇪', status: 'LIVE', homeScore: 1, awayScore: 0, totalStats: 1, kickoffTime: Date.now() - 900000, sport: 'World Cup 🏆' },
-  { id: 'USA-MEX-WC26', homeTeam: 'USA 🇺🇸', awayTeam: 'Mexico 🇲🇽', status: 'SCHEDULED', homeScore: 0, awayScore: 0, totalStats: 0, kickoffTime: Date.now() + 1800000, sport: 'World Cup 🏆' },
-  { id: 'LIV-MCI-2026', homeTeam: 'Liverpool', awayTeam: 'Man City', status: 'LIVE', homeScore: 1, awayScore: 1, totalStats: 2, kickoffTime: Date.now() - 1800000, sport: 'Football' },
-  { id: 'CHE-ARS-2026', homeTeam: 'Chelsea', awayTeam: 'Arsenal', status: 'SCHEDULED', homeScore: 0, awayScore: 0, totalStats: 0, kickoffTime: Date.now() + 600000, sport: 'Football' },
-  { id: 'LAL-BOS-2026', homeTeam: 'LA Lakers', awayTeam: 'Boston Celtics', status: 'LIVE', homeScore: 92, awayScore: 95, totalStats: 187, kickoffTime: Date.now() - 3600000, sport: 'Basketball' }
-];
-
-let simStarted = false;
-let simInterval: NodeJS.Timeout | null = null;
-
-function startSimulation() {
-  const useMock = process.env.USE_MOCK_SIMULATION !== 'false';
-  if (!useMock) {
-    console.log('[SSE Multiplexer] Simulation disabled by USE_MOCK_SIMULATION=false flag.');
-    return;
-  }
-  if (simStarted || txlineConnectionActive) return;
-  simStarted = true;
-  console.log('[SSE Multiplexer] Starting fallback match event simulation...');
-
-  simInterval = setInterval(() => {
-    if (txlineConnectionActive) return;
-
-    matchesSimulated = matchesSimulated.map(m => {
-      if (m.status === 'LIVE') {
-        const increment = Math.random() > 0.7;
-        if (increment) {
-          const homeInc = Math.random() > 0.5 ? 1 : 0;
-          const awayInc = homeInc === 0 ? 1 : 0;
-          const newHome = m.homeScore + homeInc;
-          const newAway = m.awayScore + awayInc;
-          const totalStats = m.sport === 'Football' ? (newHome + newAway) : (newHome + newAway);
-          const status = Math.random() > 0.96 ? 'FINISHED' as const : 'LIVE' as const;
-
-          const updated = { ...m, homeScore: newHome, awayScore: newAway, totalStats, status };
-          broadcast(updated);
-          return updated;
-        }
-      } else if (m.status === 'SCHEDULED') {
-        if (Math.random() > 0.95) {
-          const updated = { ...m, status: 'LIVE' as const };
-          broadcast(updated);
-          return updated;
-        }
-      }
-      return m;
-    });
-  }, 5000);
-}
-
-function stopSimulation() {
-  if (simInterval) {
-    clearInterval(simInterval);
-    simInterval = null;
-  }
-  simStarted = false;
-}
-
-function broadcast(match: any) {
-  const data = JSON.stringify({
-    matchId: match.id,
-    status: match.status,
-    homeScore: match.homeScore,
-    awayScore: match.awayScore,
-    totalStats: match.totalStats,
-    timestamp: Date.now(),
-    signature: 'mock_signature_from_txline_oracle_verified_on_chain'
-  });
-
-  const encoder = new TextEncoder();
-  const chunk = encoder.encode(`data: ${data}\n\n`);
-
-  clients.forEach(client => {
-    try {
-      client.enqueue(chunk);
-    } catch (e) {
-      clients.delete(client);
-    }
-  });
-}
-
 let connectingToTxline = false;
-function tryConnectTxline() {
-  if (connectingToTxline || txlineConnectionActive) return;
-  connectingToTxline = true;
 
-  const txlineOrigin = process.env.TXLINE_API_ORIGIN || 'https://txline.txodds.com';
-  const txlineUrl = process.env.TXLINE_URL || `${txlineOrigin}/stream`;
-  console.log(`[SSE Multiplexer] Trying to connect to real TxLINE stream at: ${txlineUrl}`);
+// The Persistent Multiplexer Cache
+const globalFixtureCache: Map<FixtureIdentifier, FixtureState> = new Map();
 
-  const useMock = process.env.USE_MOCK_SIMULATION !== 'false';
-  const client = txlineUrl.startsWith('https') ? https : http;
+// Backoff Configuration for Reconnection
+let reconnectTimeout: NodeJS.Timeout | null = null;
+let currentBackoffMs = 1000;
 
-  const headers: Record<string, string> = {
-    'Accept': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-  };
+// -------------------------------------------------------------
+// Environment Validation Helper
+// -------------------------------------------------------------
 
-  let token = process.env.TXLINE_JWT || process.env.TXLINE_API_TOKEN;
-  try {
-    const configPath = path.join(process.cwd(), '../../txline-config.json');
-    if (fs.existsSync(configPath)) {
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      if (config.apiToken) {
-        token = config.apiToken;
-      }
-    }
-  } catch (e) {
-    console.error('[SSE Multiplexer] Error loading saved token:', e);
-  }
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-    headers['x-api-key'] = token;
-  }
-
-  try {
-    const urlObj = new URL(txlineUrl);
-    const options = {
-      hostname: urlObj.hostname,
-      port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
-      path: urlObj.pathname + urlObj.search,
-      method: 'GET',
-      headers,
-    };
-
-    const req = client.request(options, (res) => {
-      if (res.statusCode !== 200) {
-        console.error(`[SSE Multiplexer] Received status code ${res.statusCode} from TxLINE stream.`);
-        connectingToTxline = false;
-        if (useMock) startSimulation();
-        return;
-      }
-      txlineConnectionActive = true;
-      connectingToTxline = false;
-      stopSimulation();
-      console.log('[SSE Multiplexer] Connected to real TxLINE stream successfully!');
-
-      let buffer = '';
-      res.on('data', (chunk) => {
-        buffer += chunk.toString();
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.startsWith('data:')) {
-            const dataContent = line.slice(5).trim();
-            if (dataContent) {
-              try {
-                const parsed = JSON.parse(dataContent);
-                const normalized = extractMatchDetails(parsed);
-                // Keep signature or ServerId if present
-                (normalized as any).signature = parsed.signature || (parsed.Update && parsed.Update.ServerId) || 'txline_verified_signature';
-
-                const encoder = new TextEncoder();
-                const payload = encoder.encode(`data: ${JSON.stringify(normalized)}\n\n`);
-                clients.forEach(c => {
-                  try { c.enqueue(payload); } catch { clients.delete(c); }
-                });
-              } catch {
-                // Forward raw line if not JSON
-                const encoder = new TextEncoder();
-                const payload = encoder.encode(`${line}\n\n`);
-                clients.forEach(c => {
-                  try { c.enqueue(payload); } catch { clients.delete(c); }
-                });
-              }
-            }
-          }
-        }
-      });
-
-      res.on('end', () => {
-        console.log('[SSE Multiplexer] Real TxLINE stream ended. Falling back.');
-        txlineConnectionActive = false;
-        if (useMock) startSimulation();
-        setTimeout(tryConnectTxline, 5000);
-      });
-    });
-
-    req.on('error', (err) => {
-      console.error('[SSE Multiplexer] Request error connecting to TxLINE:', err.message);
-      connectingToTxline = false;
-      txlineConnectionActive = false;
-      if (useMock) startSimulation();
-      setTimeout(tryConnectTxline, 10000);
-    });
-
-    req.end();
-  } catch (err: any) {
-    console.error('[SSE Multiplexer] Exception during connection setup:', err.message);
-    connectingToTxline = false;
-    txlineConnectionActive = false;
-    if (useMock) startSimulation();
-    setTimeout(tryConnectTxline, 10000);
-  }
-}
-
-function extractMatchDetails(item: any) {
-  const info = item.FixtureInfo || {};
-  const matchId = (info.FixtureId || item.matchId || item.id || item.match_id || '').toString() || `TX-${Math.random().toString(36).substr(2, 9)}`;
+function getValidatedEnvironment(apiToken: string = '', jwt: string = ''): TxLineEnvironment {
+  // Can be configured via TXLINE_NETWORK or NEXT_PUBLIC_SOLANA_NETWORK
+  const targetNetwork = (process.env.TXLINE_NETWORK || process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'devnet') as 'mainnet' | 'devnet';
   
-  let homeTeam = '';
-  let awayTeam = '';
-  if (info.Participant1 !== undefined) {
-    const p1IsHome = info.Participant1IsHome ?? true;
-    homeTeam = p1IsHome ? info.Participant1 : info.Participant2;
-    awayTeam = p1IsHome ? info.Participant2 : info.Participant1;
-  } else {
-    homeTeam = typeof item.homeTeam === 'object' ? (item.homeTeam.name || item.homeTeam.title) : (item.homeTeam || item.home_team || item.home || '');
-    awayTeam = typeof item.awayTeam === 'object' ? (item.awayTeam.name || item.awayTeam.title) : (item.awayTeam || item.away_team || item.away || '');
-  }
-
-  let homeScore = 0;
-  let awayScore = 0;
-  if (item.Update && item.Update.Scores) {
-    homeScore = item.Update.Scores.Participant1 ?? 0;
-    awayScore = item.Update.Scores.Participant2 ?? 0;
-  } else {
-    homeScore = item.homeScore !== undefined ? item.homeScore : (item.home_score !== undefined ? item.home_score : 0);
-    awayScore = item.awayScore !== undefined ? item.awayScore : (item.away_score !== undefined ? item.away_score : 0);
-  }
-
-  const totalStats = item.totalStats !== undefined ? item.totalStats : (item.total_stats !== undefined ? item.total_stats : (homeScore + awayScore));
-
-  const rawKickoff = info.StartTime || item.kickoffTime || item.kickoff_time || item.kickoff || item.date || Date.now();
-  const kickoffTime = typeof rawKickoff === 'string'
-    ? new Date(rawKickoff).getTime()
-    : (rawKickoff < 10000000000 ? rawKickoff * 1000 : rawKickoff);
-
-  const status = (info.GameState || item.status || item.state || 'SCHEDULED').toUpperCase();
+  // Enforce origin matching targetNetwork
+  const apiOrigin = targetNetwork === 'mainnet' ? 'https://txline.txodds.com' : 'https://txline-dev.txodds.com';
   
-  const comp = info.Competition || '';
-  const sportRaw = info.Sport || item.sport || item.sport_type || 'Football';
-  
-  let sport = 'Football';
-  if (comp.toLowerCase().includes('world cup') || matchId.endsWith('WC26') || matchId.toLowerCase().includes('wc')) {
-    sport = 'World Cup 🏆';
-  } else if (comp) {
-    sport = comp; // e.g. Champions League
-  } else if (sportRaw.toLowerCase() === 'basketball' || sportRaw.toLowerCase() === 'nba') {
-    sport = 'Basketball';
-  } else {
-    sport = sportRaw;
+  // Structural parity verification
+  if (targetNetwork === 'devnet' && !apiOrigin.includes('-dev')) {
+    throw new Error(`Environment Isolation Breach: targetNetwork is devnet but apiOrigin is ${apiOrigin}`);
+  }
+  if (targetNetwork === 'mainnet' && apiOrigin.includes('-dev')) {
+    throw new Error(`Environment Isolation Breach: targetNetwork is mainnet but apiOrigin is ${apiOrigin}`);
   }
 
   return {
-    id: matchId,
-    homeTeam: addFlagEmojiIfMissing(homeTeam),
-    awayTeam: addFlagEmojiIfMissing(awayTeam),
-    status,
-    homeScore,
-    awayScore,
-    totalStats,
-    kickoffTime,
-    sport
+    targetNetwork,
+    apiOrigin,
+    apiToken,
+    jwt
   };
 }
+
+async function fetchGuestJwt(apiOrigin: string): Promise<string> {
+  try {
+    const authRes = await fetch(`${apiOrigin}/auth/guest/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (!authRes.ok) {
+      throw new Error(`Guest auth failed with status ${authRes.status}`);
+    }
+    const authData = await authRes.json();
+    return authData.token || authData.jwt || '';
+  } catch (err: any) {
+    console.error(`[SSE Multiplexer] Failed to negotiate guest JWT:`, err.message);
+    return '';
+  }
+}
+
+// -------------------------------------------------------------
+// Parser & State Mutation Logic
+// -------------------------------------------------------------
 
 function addFlagEmojiIfMissing(teamName: string): string {
   if (!teamName) return '';
@@ -289,58 +116,429 @@ function addFlagEmojiIfMissing(teamName: string): string {
   return teamName;
 }
 
-async function fetchTxlineFixtures(apiToken: string): Promise<any[]> {
-  const txlineOrigin = process.env.TXLINE_API_ORIGIN || 'https://txline-dev.txodds.com';
+function parseRawFixtureToState(item: any): FixtureState {
+  const info = item.FixtureInfo || {};
+  const matchId = (info.FixtureId || item.FixtureId || item.matchId || item.id || item.match_id || '').toString();
+
+  const p1IsHome = info.Participant1IsHome ?? item.Participant1IsHome ?? true;
+  const rawP1 = info.Participant1 || item.Participant1 || item.homeTeam || '';
+  const rawP2 = info.Participant2 || item.Participant2 || item.awayTeam || '';
+  
+  const homeTeam = p1IsHome ? rawP1 : rawP2;
+  const awayTeam = p1IsHome ? rawP2 : rawP1;
+
+  let homeScore = 0;
+  let awayScore = 0;
+  if (item.Update?.Scores) {
+    homeScore = item.Update.Scores.Participant1 ?? 0;
+    awayScore = item.Update.Scores.Participant2 ?? 0;
+  } else if (item.Scores) {
+    homeScore = item.Scores.Participant1 ?? 0;
+    awayScore = item.Scores.Participant2 ?? 0;
+  } else {
+    homeScore = item.homeScore ?? item.home_score ?? 0;
+    awayScore = item.awayScore ?? item.away_score ?? 0;
+  }
+
+  const statusId = item.Update?.StatusId ?? item.GameState ?? 2; // Default to Live if kickoff update, or Scheduled if none
+
+  const rawKickoff = info.StartTime || item.StartTime || item.kickoffTime || item.kickoff_time || item.date || Date.now();
+  const kickoffTime = typeof rawKickoff === 'string'
+    ? new Date(rawKickoff).getTime()
+    : (rawKickoff < 10000000000 ? rawKickoff * 1000 : rawKickoff);
+
+  const comp = info.Competition || item.Competition || '';
+  const sportRaw = info.Sport || item.Sport || item.sport || 'Football';
+  let sport = 'Football';
+  if (comp.toLowerCase().includes('world cup')) {
+    sport = 'World Cup 🏆';
+  } else if (comp) {
+    sport = comp;
+  } else {
+    sport = sportRaw;
+  }
+
+  return {
+    id: matchId,
+    statusId,
+    scores: {
+      homeScore,
+      awayScore
+    },
+    totalStats: homeScore + awayScore,
+    lastTickTimestamp: Date.now(),
+    homeTeam: addFlagEmojiIfMissing(homeTeam),
+    awayTeam: addFlagEmojiIfMissing(awayTeam),
+    sport,
+    kickoffTime
+  };
+}
+
+// -------------------------------------------------------------
+// Abstract Control-Flow: The SSE State Machine
+// -------------------------------------------------------------
+
+function processTxOddsOracleTick(rawPacketPayload: string): void {
   try {
-    console.log(`[SSE Multiplexer] Fetching guest JWT from ${txlineOrigin}...`);
-    const authRes = await fetch(`${txlineOrigin}/auth/guest/start`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    });
-    if (!authRes.ok) {
-      throw new Error(`Guest auth failed with status ${authRes.status}`);
-    }
-    const authData = await authRes.json();
-    const jwt = authData.token || authData.jwt;
-    if (!jwt) {
-      throw new Error('No JWT found in auth response');
+    // 1. Parse JSON payload into TxOdds Action schema
+    const payload = JSON.parse(rawPacketPayload);
+    
+    // 2. Extract FixtureId from payload.FixtureInfo or top-level properties
+    const info = payload.FixtureInfo || {};
+    const fixtureId = (info.FixtureId || payload.FixtureId || payload.matchId || payload.id || '').toString();
+    if (!fixtureId) return;
+
+    // 3. Extract payload.Data and payload.Update properties
+    const update = payload.Update || {};
+    
+    // 4. Retrieve existing state pointer
+    let state = globalFixtureCache.get(fixtureId);
+    
+    // 5. INITIALIZATION CHECK:
+    if (!state) {
+      state = parseRawFixtureToState(payload);
+    } else {
+      // 6. SCORE MUTATION:
+      // Mutate scores if and only if update has scores object
+      if (update.Scores) {
+        state.scores.homeScore = update.Scores.Participant1 ?? state.scores.homeScore;
+        state.scores.awayScore = update.Scores.Participant2 ?? state.scores.awayScore;
+        state.totalStats = state.scores.homeScore + state.scores.awayScore;
+      }
+      
+      // 7. STATUS MUTATION:
+      if (update.StatusId !== undefined) {
+        state.statusId = update.StatusId;
+      }
+      
+      state.lastTickTimestamp = Date.now();
     }
 
-    console.log(`[SSE Multiplexer] Fetching fixtures from ${txlineOrigin}/api/fixtures...`);
-    const fixturesRes = await fetch(`${txlineOrigin}/api/fixtures`, {
+    // Persist mutated state to cache
+    globalFixtureCache.set(fixtureId, state);
+
+    // 8. BROADCAST:
+    // Snapshot state and broadcast to all connected web clients
+    const statusStr = state.statusId === 3 ? 'FINISHED' : (state.statusId === 2 ? 'LIVE' : 'SCHEDULED');
+    const snapshot = {
+      matchId: state.id,
+      status: statusStr,
+      homeScore: state.scores.homeScore,
+      awayScore: state.scores.awayScore,
+      totalStats: state.totalStats,
+      timestamp: state.lastTickTimestamp,
+      signature: payload.signature || update.ServerId || 'txline_verified_signature',
+      homeTeam: state.homeTeam,
+      awayTeam: state.awayTeam,
+      kickoffTime: state.kickoffTime,
+      sport: state.sport
+    };
+
+    const encoder = new TextEncoder();
+    const chunk = encoder.encode(`data: ${JSON.stringify(snapshot)}\n\n`);
+    clients.forEach(client => {
+      try {
+        client.enqueue(chunk);
+      } catch (e) {
+        clients.delete(client);
+      }
+    });
+  } catch (err: any) {
+    console.error('[SSE Multiplexer] Error processing oracle tick:', err.message);
+  }
+}
+
+// -------------------------------------------------------------
+// Memory Schema: Stream Authentication
+// -------------------------------------------------------------
+
+interface StreamCapabilities {
+  targetUri: string; // e.g., "https://txline-dev.txodds.com/api/scores/stream"
+  guestJwt: string;  // The 'Authorization: Bearer <token>'
+  apiToken: string;  // The 'X-Api-Token: <api-key>'
+}
+
+// -------------------------------------------------------------
+// Abstract Control-Flow: Socket Connection & Disconnection
+// -------------------------------------------------------------
+
+function handleEviction(error: Error): void {
+  console.error(`[SSE Multiplexer] CRYPTOGRAPHIC EVICTION: ${error.message}. Purging tokens and halting stream.`);
+  
+  // Purge local configuration file to force a fresh handshake next time
+  const configPaths = [
+    path.join(process.cwd(), '../../txline-config.json'),
+    path.join(process.cwd(), '../txline-config.json'),
+    path.join(process.cwd(), 'txline-config.json'),
+  ];
+  for (const p of configPaths) {
+    try {
+      if (fs.existsSync(p)) {
+        fs.unlinkSync(p);
+        console.log(`[SSE Multiplexer] Purged config token at ${p}`);
+      }
+    } catch (e) {}
+  }
+  
+  txlineConnectionActive = false;
+  connectingToTxline = false;
+  
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+  }
+
+  // Purge/warn clients with a strict status
+  const encoder = new TextEncoder();
+  const errorPayload = encoder.encode(`data: ${JSON.stringify({ status: 'ORACLE_EVICTED', error: error.message })}\n\n`);
+  clients.forEach(client => {
+    try {
+      client.enqueue(errorPayload);
+    } catch {
+      clients.delete(client);
+    }
+  });
+}
+
+function handleNetworkDisruption(error: Error): void {
+  console.warn(`[SSE Multiplexer] Network disruption: ${error.message}. Triggering backoff reconnection...`);
+  
+  txlineConnectionActive = false;
+  connectingToTxline = false;
+
+  const encoder = new TextEncoder();
+  const errorPayload = encoder.encode(`data: ${JSON.stringify({ status: 'ORACLE_DISCONNECTED', error: error.message })}\n\n`);
+  clients.forEach(client => {
+    try {
+      client.enqueue(errorPayload);
+    } catch {
+      clients.delete(client);
+    }
+  });
+
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+  }
+  
+  console.log(`[SSE Multiplexer] Reconnecting to Oracle in ${currentBackoffMs}ms...`);
+  reconnectTimeout = setTimeout(() => {
+    currentBackoffMs = Math.min(currentBackoffMs * 2, 30000);
+    tryConnectTxline();
+  }, currentBackoffMs);
+}
+
+// Abstract Control Flow: SSE Multiplexer Ignition
+function igniteJitStream(capabilities: StreamCapabilities): void {
+  // 1. STATE VERIFICATION:
+  // Assert that `globalFixtureCache` is fully hydrated from the snapshot barrier.
+  if (globalFixtureCache.size === 0) {
+    const fatalError = new Error("Fatal: globalFixtureCache is empty! Hydration barrier check failed.");
+    console.error(`[SSE Multiplexer] ${fatalError.message}`);
+    throw fatalError;
+  }
+
+  // 2. SOCKET INSTANTIATION:
+  const txlineUrl = capabilities.targetUri;
+  const client = txlineUrl.startsWith('https') ? https : http;
+  const headers: Record<string, string> = {
+    'Accept': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Authorization': `Bearer ${capabilities.guestJwt}`,
+    'X-Api-Token': capabilities.apiToken
+  };
+
+  if (capabilities.apiToken) {
+    headers['x-api-key'] = capabilities.apiToken;
+  }
+
+  const urlObj = new URL(txlineUrl);
+  const options = {
+    hostname: urlObj.hostname,
+    port: urlObj.port || (urlObj.protocol === 'https:' ? 443 : 80),
+    path: urlObj.pathname + urlObj.search,
+    method: 'GET',
+    headers,
+  };
+
+  const req = client.request(options, (res) => {
+    const statusCode = res.statusCode ?? 200;
+
+    // 5. EVENT ROUTING: onError (HTTP status checks)
+    if (statusCode === 401 || statusCode === 403) {
+      res.destroy();
+      handleEviction(new Error(`HTTP rejection status code ${statusCode}`));
+      return;
+    }
+
+    if (statusCode === 502 || statusCode === 503 || statusCode === 504) {
+      res.destroy();
+      handleNetworkDisruption(new Error(`HTTP rejection status code ${statusCode}`));
+      return;
+    }
+
+    if (statusCode !== 200) {
+      res.destroy();
+      handleNetworkDisruption(new Error(`HTTP rejection status code ${statusCode}`));
+      return;
+    }
+
+    // 3. EVENT ROUTING: onOpen
+    txlineConnectionActive = true;
+    connectingToTxline = false;
+    currentBackoffMs = 1000; // Reset backoff on success
+    console.log('[SSE Multiplexer] Connected to real TxLINE stream successfully! Cryptographic handshake verified.');
+
+    // 4. EVENT ROUTING: onMessage (The Delta Pipeline)
+    let buffer = '';
+    res.on('data', (chunk) => {
+      buffer += chunk.toString();
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.startsWith('data:')) {
+          const dataContent = line.slice(5).trim();
+          if (dataContent) {
+            processTxOddsOracleTick(dataContent);
+          }
+        }
+      }
+    });
+
+    res.on('end', () => {
+      handleNetworkDisruption(new Error('Connection closed by TxOdds host.'));
+    });
+  });
+
+  req.on('error', (err) => {
+    handleNetworkDisruption(err);
+  });
+
+  req.end();
+}
+
+async function tryConnectTxline() {
+  if (connectingToTxline || txlineConnectionActive) return;
+  connectingToTxline = true;
+
+  try {
+    // 1. Load API token from workspace configs
+    let apiToken = process.env.TXLINE_API_TOKEN || '';
+    let resolvedPath = '';
+    const pathsToSearch = [
+      path.join(process.cwd(), '../../txline-config.json'),
+      path.join(process.cwd(), '../txline-config.json'),
+      path.join(process.cwd(), 'txline-config.json'),
+      path.join(__dirname, '../../../../txline-config.json'),
+      path.join(__dirname, '../../../../../../txline-config.json'),
+    ];
+
+    for (const p of pathsToSearch) {
+      if (fs.existsSync(p)) {
+        resolvedPath = p;
+        break;
+      }
+    }
+
+    if (resolvedPath) {
+      const config = JSON.parse(fs.readFileSync(resolvedPath, 'utf8'));
+      if (config.apiToken) {
+        apiToken = config.apiToken;
+      }
+    }
+
+    if (!apiToken) {
+      throw new Error("No API token resolved for TxLINE connection.");
+    }
+
+    // Enforce synchronous hydration barrier: Fetch and populate snapshot first
+    console.log('[SSE Multiplexer] Enforcing synchronous hydration barrier...');
+    await fetchTxlineFixtures(apiToken);
+
+    // 2. Validate environment configuration
+    const env = getValidatedEnvironment(apiToken);
+
+    // Validate apiOrigin structurally aligns with targetNetwork string BEFORE initiating request
+    if (env.targetNetwork === 'devnet' && !env.apiOrigin.includes('-dev')) {
+      throw new Error(`Config error: Devnet target network cannot run on mainnet origin ${env.apiOrigin}`);
+    }
+    if (env.targetNetwork === 'mainnet' && env.apiOrigin.includes('-dev')) {
+      throw new Error(`Config error: Mainnet target network cannot run on devnet origin ${env.apiOrigin}`);
+    }
+
+    // 3. Retrieve guest JWT from target network endpoint
+    const jwt = await fetchGuestJwt(env.apiOrigin);
+    env.jwt = jwt;
+
+    const txlineBase = process.env.TXLINE_API_ORIGIN || env.apiOrigin;
+    const txlineUrl = process.env.TXLINE_URL || `${txlineBase}/api/scores/stream`;
+    console.log(`[SSE Multiplexer] Isolation check passed. Connecting to: ${txlineUrl}`);
+
+    const capabilities: StreamCapabilities = {
+      targetUri: txlineUrl,
+      guestJwt: process.env.TXLINE_GUEST_JWT || env.jwt,
+      apiToken: process.env.TXLINE_ACTIVATED_TOKEN || env.apiToken
+    };
+
+    igniteJitStream(capabilities);
+  } catch (err: any) {
+    connectingToTxline = false;
+    handleNetworkDisruption(err);
+  }
+}
+
+// -------------------------------------------------------------
+// REST Endpoint Setup & Client Synchronization
+// -------------------------------------------------------------
+
+async function fetchTxlineFixtures(apiToken: string): Promise<any[]> {
+  try {
+    const env = getValidatedEnvironment(apiToken);
+    
+    // Retrieve guest JWT
+    const jwt = await fetchGuestJwt(env.apiOrigin);
+    env.jwt = jwt;
+
+    const snapshotUrl = `${env.apiOrigin}/api/fixtures/snapshot`;
+    console.log(`[SSE Multiplexer] Fetching baseline snapshot from ${snapshotUrl}...`);
+    const fixturesRes = await fetch(snapshotUrl, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${jwt}`,
-        'X-Api-Token': apiToken
+        'Authorization': `Bearer ${env.jwt}`,
+        'X-Api-Token': env.apiToken
       }
     });
 
     if (!fixturesRes.ok) {
-      throw new Error(`Fixtures fetch failed with status ${fixturesRes.status}`);
+      throw new Error(`Baseline snapshot fetch returned status ${fixturesRes.status} (${fixturesRes.statusText})`);
     }
 
     const data = await fixturesRes.json();
     const fixtures = Array.isArray(data) ? data : (data.fixtures || data.data || []);
     
-    console.log(`[SSE Multiplexer] Successfully fetched ${fixtures.length} fixtures from TxLINE API.`);
+    console.log(`[SSE Multiplexer] Successfully fetched ${fixtures.length} baseline fixtures.`);
     
-    return fixtures.map((f: any) => {
-      return extractMatchDetails(f);
-    });
+    // Clear and populate cache
+    globalFixtureCache.clear();
+    for (const f of fixtures) {
+      const details = parseRawFixtureToState(f);
+      if (details.id) {
+        globalFixtureCache.set(details.id, details);
+      }
+    }
+
+    return fixtures;
   } catch (err: any) {
-    console.error('[SSE Multiplexer] Error calling TxLINE REST API:', err.message);
-    return [];
+    console.error('[SSE Multiplexer] Fatal error during snapshot hydration:', err.message);
+    throw err; // Rethrow to halt execution and prevent socket connection
   }
 }
 
 export async function GET(req: NextRequest) {
+  // Trigger connection background link (which handles hydration & socket setup synchronously)
   tryConnectTxline();
   
-  const useMock = process.env.USE_MOCK_SIMULATION !== 'false';
-  if (useMock) {
-    startSimulation();
-  }
-
   // Load API token if configured
   let apiToken = '';
   try {
@@ -357,27 +555,30 @@ export async function GET(req: NextRequest) {
 
       const encoder = new TextEncoder();
       
-      let matchesToStream = matchesSimulated;
-      if (apiToken) {
-        const dynamicFixtures = await fetchTxlineFixtures(apiToken);
-        if (dynamicFixtures.length > 0) {
-          matchesToStream = dynamicFixtures;
+      // Wait for the synchronous hydration barrier to populate globalFixtureCache
+      if (apiToken && globalFixtureCache.size === 0) {
+        let retries = 0;
+        while (globalFixtureCache.size === 0 && retries < 20) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          retries++;
         }
       }
 
-      matchesToStream.forEach(m => {
+      // Stream the cached states to the client
+      globalFixtureCache.forEach(state => {
+        const statusStr = state.statusId === 3 ? 'FINISHED' : (state.statusId === 2 ? 'LIVE' : 'SCHEDULED');
         const payload = JSON.stringify({
-          matchId: m.id,
-          status: m.status,
-          homeScore: m.homeScore,
-          awayScore: m.awayScore,
-          totalStats: m.totalStats,
-          timestamp: Date.now(),
-          signature: 'mock_initial_data',
-          homeTeam: m.homeTeam,
-          awayTeam: m.awayTeam,
-          kickoffTime: m.kickoffTime,
-          sport: m.sport
+          matchId: state.id,
+          status: statusStr,
+          homeScore: state.scores.homeScore,
+          awayScore: state.scores.awayScore,
+          totalStats: state.totalStats,
+          timestamp: state.lastTickTimestamp,
+          signature: 'initial_state',
+          homeTeam: state.homeTeam,
+          awayTeam: state.awayTeam,
+          kickoffTime: state.kickoffTime,
+          sport: state.sport
         });
         controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
       });

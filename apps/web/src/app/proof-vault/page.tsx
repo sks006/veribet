@@ -2,11 +2,13 @@
 
 import React, { useEffect, useState } from 'react';
 import { useProgram } from '../../hooks/useProgram';
+import { useTxLine } from '../../hooks/useTxLine';
 import { ShieldCheck, Search, ExternalLink, Calendar, Database, Cpu } from 'lucide-react';
 import { formatAddress } from '../../lib/utils';
 
 export default function ProofVaultPage() {
   const { program } = useProgram();
+  const { matches } = useTxLine();
   const [resolvedMarkets, setResolvedMarkets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -35,6 +37,18 @@ export default function ProofVaultPage() {
 
   const filtered = resolvedMarkets.filter((market: any) => {
     const matchId = Buffer.from(market.account.matchIdBytes).toString('utf8').replace(/\0/g, '');
+    
+    // Exclude Friendlies matches from prediction pages
+    const match = matches.find(m => m.id === matchId);
+    if (match) {
+      const isFriendly = match.sport?.toLowerCase().includes('friendlies') || match.sport?.toLowerCase().includes('friendly');
+      if (isFriendly) return false;
+    } else {
+      if (["18143850", "18182808", "18182864"].includes(matchId)) {
+        return false;
+      }
+    }
+
     const proofHashHex = Buffer.from(market.account.proofHash).toString('hex');
     return matchId.toLowerCase().includes(search.toLowerCase()) || proofHashHex.toLowerCase().includes(search.toLowerCase());
   });

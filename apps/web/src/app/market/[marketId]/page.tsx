@@ -107,6 +107,15 @@ export default function MarketDetailPage({ params }: PageProps) {
     }
   };
 
+  const isFriendly = match?.sport?.toLowerCase().includes('friendlies') || match?.sport?.toLowerCase().includes('friendly') || ["18143850", "18182808", "18182864"].includes(marketIdStr);
+  if (isFriendly) {
+    return (
+      <div className="market-loading-wrapper">
+        <p>No prediction market available for Friendlies matches.</p>
+      </div>
+    );
+  }
+
   if (marketLoading || !marketState) {
     return (
       <div className="market-loading-wrapper">
@@ -181,6 +190,8 @@ export default function MarketDetailPage({ params }: PageProps) {
               marketId={marketState.marketId.toNumber()}
               homeTeam={match?.homeTeam || 'Home'}
               awayTeam={match?.awayTeam || 'Away'}
+              kickoffTime={match ? match.kickoffTime : (marketState ? marketState.kickoffTimestamp.toNumber() * 1000 : undefined)}
+              status={match ? match.status : undefined}
               onSuccess={() => {
                 fetchUserPosition();
               }}

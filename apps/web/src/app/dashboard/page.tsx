@@ -119,11 +119,16 @@ export default function DashboardPage() {
 
   // Memoize filtered matches to avoid re-calculating on every render
   const filteredMatches = React.useMemo(() => {
-    return matches.filter((m) =>
-      m.homeTeam.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.awayTeam.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.id.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    return matches.filter((m) => {
+      const isFriendly = m.sport?.toLowerCase().includes('friendlies') || m.sport?.toLowerCase().includes('friendly');
+      if (isFriendly) return false;
+
+      return (
+        m.homeTeam.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        m.awayTeam.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        m.id.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    });
   }, [matches, searchTerm]);
 
   return (

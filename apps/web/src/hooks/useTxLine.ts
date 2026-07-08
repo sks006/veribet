@@ -25,6 +25,11 @@ export function useTxLine() {
         try {
           const data = JSON.parse(event.data);
           
+          if (data.status === 'ORACLE_DISCONNECTED') {
+            setConnectionStatus('disconnected');
+            return;
+          }
+          
           const updatedMatch: Match = {
             id: data.matchId,
             homeTeam: data.homeTeam || getHomeTeam(data.matchId),

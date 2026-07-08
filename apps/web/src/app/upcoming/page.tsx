@@ -115,11 +115,16 @@ export default function UpcomingPage() {
 
   // Filter and split matches into World Cup and Club matches
   const { worldCupMatches, clubMatches } = React.useMemo(() => {
-    const filtered = matches.filter((m) =>
-      m.homeTeam.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.awayTeam.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.id.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const filtered = matches.filter((m) => {
+      const isFriendly = m.sport?.toLowerCase().includes('friendlies') || m.sport?.toLowerCase().includes('friendly');
+      if (isFriendly) return false;
+
+      return (
+        m.homeTeam.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        m.awayTeam.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        m.id.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    });
 
     const wc = filtered.filter(m => m.sport === 'World Cup 🏆' || m.id.endsWith('WC26'));
     const clubs = filtered.filter(m => m.sport !== 'World Cup 🏆' && !m.id.endsWith('WC26'));

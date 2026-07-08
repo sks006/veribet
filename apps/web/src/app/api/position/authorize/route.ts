@@ -10,21 +10,44 @@ function getDelegatedAuthorityKeypair(): Keypair {
     return cachedAuthorityKeypair;
   }
 
+  let resolvedPath = '';
   const envPath = process.env.AUTHORITY_KEY_PATH;
   if (envPath) {
-    try {
-      const resolvedPath = path.resolve(envPath);
-      if (fs.existsSync(resolvedPath)) {
-        const raw = fs.readFileSync(resolvedPath, 'utf8');
-        const secret = Uint8Array.from(JSON.parse(raw));
-        cachedAuthorityKeypair = Keypair.fromSecretKey(secret);
-        return cachedAuthorityKeypair;
-      }
-    } catch (e) {
-      console.warn('[Authorize API] Failed to load keypair from AUTHORITY_KEY_PATH, generating fallback.');
+    const p = path.resolve(envPath);
+    if (fs.existsSync(p)) {
+      resolvedPath = p;
     }
   }
 
+  if (!resolvedPath) {
+    const pathsToSearch = [
+      path.join(process.cwd(), '../../authority-keypair.json'),
+      path.join(process.cwd(), '../authority-keypair.json'),
+      path.join(process.cwd(), 'authority-keypair.json'),
+      path.join(__dirname, '../../../../authority-keypair.json'),
+      path.join(__dirname, '../../../../../../authority-keypair.json'),
+    ];
+    for (const p of pathsToSearch) {
+      if (fs.existsSync(p)) {
+        resolvedPath = p;
+        break;
+      }
+    }
+  }
+
+  if (resolvedPath) {
+    try {
+      const raw = fs.readFileSync(resolvedPath, 'utf8');
+      const secret = Uint8Array.from(JSON.parse(raw));
+      cachedAuthorityKeypair = Keypair.fromSecretKey(secret);
+      console.log(`[Authorize API] Loaded authority keypair from ${resolvedPath}`);
+      return cachedAuthorityKeypair;
+    } catch (e) {
+      console.warn(`[Authorize API] Failed to read keypair from ${resolvedPath}:`, e);
+    }
+  }
+
+  console.warn('[Authorize API] No authority-keypair.json found, generating fallback.');
   cachedAuthorityKeypair = Keypair.generate();
   return cachedAuthorityKeypair;
 }
@@ -56,6 +79,10 @@ export async function POST(req: NextRequest) {
     } else {
       const tx = Transaction.from(buffer);
       console.log('[Authorize API] Validating legacy transaction...');
+      console.log('[Authorize API] Signatures:', tx.signatures.map(s => ({ publicKey: s.publicKey.toBase58(), signature: s.signature ? 'present' : 'null' })));
+      const message = tx.compileMessage();
+      console.log('[Authorize API] Account keys:', message.accountKeys.map(k => k.toBase58()));
+      console.log('[Authorize API] Header:', message.header);
       tx.partialSign(authorityKeypair);
       serializedTxHex = tx.serialize({ requireAllSignatures: false }).toString('hex');
     }

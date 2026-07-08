@@ -1,4 +1,4 @@
-import { Connection, PublicKey, Transaction, SystemProgram } from '@solana/web3.js';
+import { Connection, PublicKey, Transaction, SystemProgram, SendTransactionError } from '@solana/web3.js';
 import * as anchor from '@coral-xyz/anchor';
 import { 
   getAssociatedTokenAddress, 
@@ -126,11 +126,29 @@ export async function placePositionWithDelegation(
   }
 
   tx.add(placePositionInstruction);
+  console.log('[Client] PlacePositionInstruction keys:', placePositionInstruction.keys.map((k: any) => ({ pubkey: k.pubkey.toBase58(), isSigner: k.isSigner })));
+
+  // Intercept the Transaction object and ensure that the delegatedAuthority key is marked as isSigner = true
+  for (const ix of tx.instructions) {
+    for (const keyMeta of ix.keys) {
+      if (keyMeta.pubkey.equals(delegatedAuthority)) {
+        keyMeta.isSigner = true;
+      }
+    }
+  }
+
+  console.log('[Client] After interception, instruction keys:', tx.instructions.map((ix: any) => ix.keys.map((k: any) => ({ pubkey: k.pubkey.toBase58(), isSigner: k.isSigner }))));
+
   tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
   tx.feePayer = userWallet;
 
   // Sign with user wallet
   const partiallySignedTx = await walletSignTransaction(tx);
+  console.log('[Client] After walletSignTransaction, signatures:', partiallySignedTx.signatures.map((s: any) => ({ publicKey: s.publicKey.toBase58(), signature: s.signature ? 'present' : 'null' })));
+  
+  // Inspecting instruction keys in the signed transaction returned by wallet adapter
+  console.log('[Client] After walletSignTransaction, instruction keys:', partiallySignedTx.instructions.map((ix: any) => ix.keys.map((k: any) => ({ pubkey: k.pubkey.toBase58(), isSigner: k.isSigner }))));
+
   const serializedTx = partiallySignedTx.serialize({ requireAllSignatures: false }).toString('hex');
 
   // 6. Sign with server delegated authority
@@ -146,10 +164,42 @@ export async function placePositionWithDelegation(
 
   // 7. Deserialize & Broadcast
   const finalTx = Transaction.from(Buffer.from(signResponse.transactionHex, 'hex'));
-  const txSig = await connection.sendRawTransaction(finalTx.serialize(), {
-    skipPreflight: false,
-    preflightCommitment: 'confirmed'
-  });
+  try {
+    const txSig = await connection.sendRawTransaction(finalTx.serialize(), {
+      skipPreflight: false,
+      preflightCommitment: 'confirmed'
+    });
+    return txSig;
+  } catch (err: any) {
+    console.error('[Client] sendRawTransaction failed:', err);
+    let logs: string[] = [];
+    if (err instanceof SendTransactionError) {
+      try {
+        // Try getting logs synchronously or asynchronously
+        const possibleLogs = (err as any).logs || await (err as any).getLogs(connection);
+        if (Array.isArray(possibleLogs)) {
+          logs = possibleLogs;
+        }
+      } catch (logErr) {
+        console.error('Failed to retrieve logs from SendTransactionError:', logErr);
+      }
+    } else if (err.logs && Array.isArray(err.logs)) {
+      logs = err.logs;
+    } else if (typeof err.getLogs === 'function') {
+      try {
+        const possibleLogs = err.getLogs();
+        if (Array.isArray(possibleLogs)) {
+          logs = possibleLogs;
+        }
+      } catch (logErr) {
+        console.error('Failed to call getLogs():', logErr);
+      }
+    }
 
-  return txSig;
+    if (logs.length > 0) {
+      console.error('[Client] Transaction logs:', logs);
+      throw new Error(`Simulation failed. Message: ${err.message}. Logs: ${JSON.stringify(logs)}`);
+    }
+    throw err;
+  }
 }

@@ -11,6 +11,8 @@ interface PredictionFormProps {
   homeTeam: string;
   awayTeam: string;
   onSuccess?: (txSig: string) => void;
+  kickoffTime?: number;
+  status?: string;
 }
 
 export function PredictionForm({
@@ -18,7 +20,9 @@ export function PredictionForm({
   marketId,
   homeTeam,
   awayTeam,
-  onSuccess
+  onSuccess,
+  kickoffTime,
+  status
 }: PredictionFormProps) {
   const { connection } = useConnection();
   const { publicKey, signTransaction } = useWallet();
@@ -30,8 +34,17 @@ export function PredictionForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Time gating validation logic
+  const isTimeClosed = kickoffTime ? Date.now() >= kickoffTime : false;
+  const isStatusClosed = status ? status !== 'SCHEDULED' : false;
+  const isWindowClosed = isTimeClosed || isStatusClosed;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isWindowClosed) {
+      setError('The prediction window for this market has closed (kickoff reached or match in progress).');
+      return;
+    }
     if (!publicKey || !signTransaction) {
       setError('Please connect your wallet first.');
       return;
@@ -82,6 +95,13 @@ export function PredictionForm({
     <form className="prediction-form" onSubmit={handleSubmit}>
       <h3 className="form-title">Place Your Position</h3>
 
+      {isWindowClosed && (
+        <div className="error-banner warning-banner">
+          <ShieldAlert size={16} className="shrink-0" />
+          <span>The prediction window for this market has closed (kickoff reached or match in progress).</span>
+        </div>
+      )}
+
       {/* Prediction Selection */}
       <div className="section-container">
         <label className="section-label">Select Outcome</label>
@@ -90,6 +110,7 @@ export function PredictionForm({
             type="button"
             className={`select-btn ${prediction === 0 ? 'active' : ''}`}
             onClick={() => setPrediction(0)}
+            disabled={isWindowClosed || submitting}
           >
             <span className="btn-team-name">{homeTeam}</span>
             <span className="btn-label">Home Win</span>
@@ -98,6 +119,7 @@ export function PredictionForm({
             type="button"
             className={`select-btn ${prediction === 2 ? 'active' : ''}`}
             onClick={() => setPrediction(2)}
+            disabled={isWindowClosed || submitting}
           >
             <span className="btn-team-name">Draw</span>
             <span className="btn-label">Tie Game</span>
@@ -106,6 +128,7 @@ export function PredictionForm({
             type="button"
             className={`select-btn ${prediction === 1 ? 'active' : ''}`}
             onClick={() => setPrediction(1)}
+            disabled={isWindowClosed || submitting}
           >
             <span className="btn-team-name">{awayTeam}</span>
             <span className="btn-label">Away Win</span>
@@ -125,6 +148,7 @@ export function PredictionForm({
             className="collateral-input"
             value={collateral}
             onChange={(e) => setCollateral(e.target.value)}
+            disabled={isWindowClosed || submitting}
             required
           />
           <span className="input-suffix">SOL</span>
@@ -138,6 +162,7 @@ export function PredictionForm({
           className="tier-select"
           value={tierLevel}
           onChange={(e) => setTierLevel(parseInt(e.target.value))}
+          disabled={isWindowClosed || submitting}
         >
           <option value={1}>Tier 1 (Base Rebate - 0% Boost)</option>
           <option value={2}>Tier 2 (Bronze Rebate - 10% Boost)</option>
@@ -177,10 +202,14 @@ export function PredictionForm({
       <button
         type="submit"
         className="submit-btn"
-        disabled={submitting || !publicKey}
+        disabled={isWindowClosed || submitting || !publicKey}
       >
         {submitting ? (
           <span className="loading-spinner"></span>
+        ) : isWindowClosed ? (
+          <span className="flex items-center gap-2 justify-center">
+            Prediction Window Closed <ShieldAlert size={16} />
+          </span>
         ) : (
           <span className="flex items-center gap-2 justify-center">
             Confirm Prediction <Sparkles size={16} />
@@ -369,6 +398,18 @@ export function PredictionForm({
           display: flex;
           align-items: center;
           gap: 0.6rem;
+        }
+
+        .warning-banner {
+          background: rgba(245, 158, 11, 0.1);
+          border: 1px solid rgba(245, 158, 11, 0.2);
+          color: #d97706;
+        }
+
+        .select-btn:disabled, .collateral-input:disabled, .tier-select:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+          pointer-events: none;
         }
 
         .submit-btn {

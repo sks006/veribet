@@ -7,7 +7,7 @@ import idlJson from '../../../target/idl/veribet.json';
 
 export class CrankSubmitter {
   private connection: Connection;
-  private program: anchor.Program;
+  private program: any;
   private authorityKeypair: Keypair;
 
   constructor(rpcUrl: string, programIdStr: string, authorityKeypair: Keypair) {
