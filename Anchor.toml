@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-veribet = "2GGEMRrbf2E6CLBYGU47p42aCa7cByknAVwcrTUMoLUo"
+veribet = "2Syq46YQQ4iGbCouFYxjeHEcABScMd669NAK5XrxZFWG"
 
 [registry]
 url = "https://api.apr.dev"

@@ -12,7 +12,7 @@ pub use instructions::*;
 pub use state::*;
 pub use utils::*;
 
-declare_id!("2GGEMRrbf2E6CLBYGU47p42aCa7cByknAVwcrTUMoLUo");
+declare_id!("2Syq46YQQ4iGbCouFYxjeHEcABScMd669NAK5XrxZFWG");
 
 #[program]
 pub mod veribet {

@@ -1,0 +1,44 @@
+# 🏆 TxLINE Hackathon Submission & Alignment Report
+
+This report outlines how **VeriBet** fulfills the requirements of the **TxLINE track**, highlighting our implementation details, user experience patterns, and compliance with the track's architectural constraints.
+
+---
+
+## 🗺️ Track Requirement Mapping
+
+| TxLINE Track Requirement | VeriBet Implementation Status | Technical Details |
+| :--- | :--- | :--- |
+| **Real-Time Data Ingestion** | **✅ Fully Implemented** | Connected to `https://txline-dev.txodds.com/stream` via our backend SSE proxy and off-chain crank service. |
+| **No P2P Asset Transfers** | **✅ Fully Compliant** | TxLINE credit tokens (`TXL`) are strictly used for data-auth subscriptions (configured in `/setup`). Staking and wagers use native/wrapped SOL. |
+| **Verifiable Resolution UI** | **✅ Fully Implemented** | The **Proof Vault** page and `ProofReceiptModal` display the SHA-256 Merkle root hashes and transaction signatures, making resolutions transparent. |
+| **On-Chain Settlement Engine** | **✅ Fully Implemented** | Anchor program stores the cryptographic `proof_hash` directly in the `ParametricMarket` state during resolution, ensuring deterministic settlements. |
+| **Mobile-First UX** | **✅ Fully Implemented** | Clean premium light-theme dashboard, responsive layout, and integrated step-by-step API setup wizard. |
+
+---
+
+## 🔍 Deep Dive: How VeriBet Stands Out
+
+### 1. The Setup & Activation Loop (Step-by-Step UX)
+Instead of forcing users to configure complex API credentials manually, we built a developer/admin wizard at `/setup` that handles the entire TxLINE subscription lifecycle:
+1. **Authorize:** Obtains a guest JWT from TxLINE's auth start endpoint.
+2. **On-Chain Subscribe:** Triggers the Solana Devnet `subscribe` instruction using Token-2022.
+3. **Activate:** Signs the proof message with the wallet and requests the activated API token.
+4. **Deploy:** Saves the configuration directly to the server backend.
+
+### 2. On-Chain Cryptographic Proof Anchoring
+When a match completes, our Crank Service:
+1. Listens to the SSE Stream event.
+2. Verifies the signature off-chain.
+3. Submits the match outcome along with the SHA-256 Merkle `proof_hash` to the smart contract's `resolve_market` instruction.
+4. The smart contract commits the `proof_hash` to the public state on Solana, securing it from counterparty tampering.
+
+### 3. Strict Compliance with the "No P2P Transfers" Rule
+As mandated, `TXL` tokens are restricted to our protocol-level PDA interface. User wagers are handled via an independent pool using native `SOL` / wrapped tokens. This allows players to bet trustlessly while keeping data access authorization fully locked inside the Solana program boundaries.
+
+---
+
+## 📈 Suggestion for Demo Video
+Since matches may end after the submission deadline, we recommend structure for the demo video:
+*   **0:00 - 1:00:** Show the wallet connection, balance fetching, and the `/setup` wizard in action.
+*   **1:00 - 2:00:** Place a prediction on an active match using the white light-theme UI.
+*   **2:00 - 3:00:** Demonstrate the crank service picking up the event, verifying the signature, and resolving the market. Show the resulting receipt in the **Proof Vault**.

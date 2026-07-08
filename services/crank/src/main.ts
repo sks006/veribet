@@ -1,5 +1,6 @@
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
+import * as path from 'path';
 import { Keypair } from '@solana/web3.js';
 import { SseClient } from './sse-client';
 import { ProofHandler } from './proof-handler';
@@ -11,10 +12,10 @@ import idlJson from '../../../target/idl/veribet.json';
 // Load env
 dotenv.config();
 
-const RPC_URL = process.env.RPC_URL || 'http://127.0.0.1:8899';
-const PROGRAM_ID = process.env.PROGRAM_ID || '2GGEMRrbf2E6CLBYGU47p42aCa7cByknAVwcrTUMoLUo';
+const RPC_URL = process.env.RPC_URL || 'https://api.devnet.solana.com';
+const PROGRAM_ID = process.env.PROGRAM_ID || '2Syq46YQQ4iGbCouFYxjeHEcABScMd669NAK5XrxZFWG';
 const AUTHORITY_KEY_PATH = process.env.AUTHORITY_KEY_PATH || './authority-keypair.json';
-const TXLINE_URL = process.env.TXLINE_URL || 'http://localhost:4000/stream';
+const TXLINE_URL = process.env.TXLINE_URL || 'https://txline-dev.txodds.com/stream';
 const ORACLE_PUBLIC_KEY = process.env.ORACLE_PUBLIC_KEY || 'mock';
 
 function loadKeypair(path: string): Keypair {
@@ -47,8 +48,39 @@ async function main() {
   const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(authorityKeypair), { commitment: 'confirmed' });
   const program = new anchor.Program(idlJson as any, provider);
 
+  // Try to load API token from txline-config.json
+  let apiToken = process.env.TXLINE_API_TOKEN || '';
+  try {
+    const configPath = path.resolve(__dirname, '../../../../txline-config.json');
+    const localConfigPath = path.resolve(process.cwd(), 'txline-config.json');
+    const parentConfigPath = path.resolve(process.cwd(), '../txline-config.json');
+    const workspaceConfigPath = path.resolve(process.cwd(), '../../txline-config.json');
+
+    let resolvedPath = '';
+    if (fs.existsSync(configPath)) resolvedPath = configPath;
+    else if (fs.existsSync(localConfigPath)) resolvedPath = localConfigPath;
+    else if (fs.existsSync(parentConfigPath)) resolvedPath = parentConfigPath;
+    else if (fs.existsSync(workspaceConfigPath)) resolvedPath = workspaceConfigPath;
+
+    if (resolvedPath) {
+      const config = JSON.parse(fs.readFileSync(resolvedPath, 'utf8'));
+      if (config.apiToken) {
+        apiToken = config.apiToken;
+        console.log(`[Crank Main] Loaded TxLINE API Token from config file: ${resolvedPath}`);
+      }
+    }
+  } catch (e: any) {
+    console.error('[Crank Main] Error loading saved token:', e.message);
+  }
+
+  const headers: Record<string, string> = {};
+  if (apiToken) {
+    headers['Authorization'] = `Bearer ${apiToken}`;
+    headers['x-api-key'] = apiToken;
+  }
+
   // Set up SSE client
-  const sseClient = new SseClient(TXLINE_URL);
+  const sseClient = new SseClient(TXLINE_URL, headers);
 
   sseClient.onMessage(async (data: string) => {
     try {

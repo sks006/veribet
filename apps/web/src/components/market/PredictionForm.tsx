@@ -194,11 +194,11 @@ export function PredictionForm({
 
       <style jsx>{`
         .prediction-form {
-          background: rgba(30, 41, 59, 0.3);
-          border: 1px solid rgba(255, 255, 255, 0.05);
+          background: #ffffff;
+          border: 1px solid rgba(15, 23, 42, 0.08);
           border-radius: 20px;
           padding: 1.5rem;
-          backdrop-filter: blur(16px);
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
           display: flex;
           flex-direction: column;
           gap: 1.5rem;
@@ -207,7 +207,7 @@ export function PredictionForm({
         .form-title {
           font-size: 1.15rem;
           font-weight: 700;
-          color: #f8fafc;
+          color: #0f172a;
           letter-spacing: -0.02em;
         }
 
@@ -220,7 +220,7 @@ export function PredictionForm({
         .section-label {
           font-size: 0.75rem;
           font-weight: 600;
-          color: #94a3b8;
+          color: #64748b;
           text-transform: uppercase;
           letter-spacing: 0.05em;
         }
@@ -232,8 +232,8 @@ export function PredictionForm({
         }
 
         .select-btn {
-          background: rgba(15, 23, 42, 0.4);
-          border: 1px solid rgba(255, 255, 255, 0.04);
+          background: rgba(15, 23, 42, 0.02);
+          border: 1px solid rgba(15, 23, 42, 0.04);
           border-radius: 12px;
           padding: 0.75rem 0.5rem;
           display: flex;
@@ -250,15 +250,15 @@ export function PredictionForm({
         }
 
         .select-btn.active {
-          background: rgba(99, 102, 241, 0.15);
+          background: rgba(99, 102, 241, 0.08);
           border-color: #6366f1;
-          box-shadow: 0 0 12px rgba(99, 102, 241, 0.25);
+          box-shadow: 0 0 12px rgba(99, 102, 241, 0.15);
         }
 
         .btn-team-name {
           font-size: 0.85rem;
           font-weight: 700;
-          color: #f8fafc;
+          color: #0f172a;
           text-overflow: ellipsis;
           overflow: hidden;
           white-space: nowrap;
@@ -271,7 +271,7 @@ export function PredictionForm({
         }
 
         .select-btn.active .btn-label {
-          color: #a5b4fc;
+          color: #4f46e5;
         }
 
         .input-wrapper {
@@ -288,11 +288,11 @@ export function PredictionForm({
 
         .collateral-input {
           width: 100%;
-          background: rgba(15, 23, 42, 0.5);
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: rgba(15, 23, 42, 0.02);
+          border: 1px solid rgba(15, 23, 42, 0.08);
           border-radius: 12px;
           padding: 0.85rem 1rem 0.85rem 2.5rem;
-          color: #ffffff;
+          color: #0f172a;
           font-size: 1rem;
           font-weight: 600;
           outline: none;
@@ -301,7 +301,7 @@ export function PredictionForm({
 
         .collateral-input:focus {
           border-color: #6366f1;
-          box-shadow: 0 0 10px rgba(99, 102, 241, 0.15);
+          box-shadow: 0 0 10px rgba(99, 102, 241, 0.1);
         }
 
         .input-suffix {
@@ -313,11 +313,11 @@ export function PredictionForm({
         }
 
         .tier-select {
-          background: rgba(15, 23, 42, 0.5);
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: rgba(15, 23, 42, 0.02);
+          border: 1px solid rgba(15, 23, 42, 0.08);
           border-radius: 12px;
           padding: 0.85rem 1rem;
-          color: #ffffff;
+          color: #0f172a;
           font-size: 0.9rem;
           outline: none;
           cursor: pointer;
@@ -328,8 +328,8 @@ export function PredictionForm({
         }
 
         .breakdown-card {
-          background: rgba(15, 23, 42, 0.3);
-          border: 1px solid rgba(255, 255, 255, 0.03);
+          background: rgba(15, 23, 42, 0.02);
+          border: 1px solid rgba(15, 23, 42, 0.04);
           border-radius: 14px;
           padding: 1rem;
           display: flex;
@@ -341,17 +341,17 @@ export function PredictionForm({
           display: flex;
           justify-content: space-between;
           font-size: 0.8rem;
-          color: #94a3b8;
+          color: #64748b;
         }
 
         .breakdown-row.total {
           font-size: 0.9rem;
-          color: #f8fafc;
+          color: #0f172a;
         }
 
         .breakdown-divider {
           height: 1px;
-          background: rgba(255, 255, 255, 0.05);
+          background: rgba(15, 23, 42, 0.08);
           margin: 0.2rem 0;
         }
 
@@ -362,7 +362,7 @@ export function PredictionForm({
         .error-banner {
           background: rgba(239, 68, 68, 0.1);
           border: 1px solid rgba(239, 68, 68, 0.2);
-          color: #fca5a5;
+          color: #b91c1c;
           padding: 0.75rem 1rem;
           border-radius: 12px;
           font-size: 0.8rem;

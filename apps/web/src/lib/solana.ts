@@ -1,8 +1,12 @@
-import { Connection, PublicKey, Transaction } from '@solana/web3.js';
+import { Connection, PublicKey, Transaction, SystemProgram } from '@solana/web3.js';
 import * as anchor from '@coral-xyz/anchor';
-import { getAssociatedTokenAddress } from '@solana/spl-token';
+import { 
+  getAssociatedTokenAddress, 
+  createAssociatedTokenAccountInstruction, 
+  createSyncNativeInstruction 
+} from '@solana/spl-token';
 
-export const PROGRAM_ID = new PublicKey('2GGEMRrbf2E6CLBYGU47p42aCa7cByknAVwcrTUMoLUo');
+export const PROGRAM_ID = new PublicKey('2Syq46YQQ4iGbCouFYxjeHEcABScMd669NAK5XrxZFWG');
 
 export function getMarketPda(marketId: number): PublicKey {
   const [marketAddress] = PublicKey.findProgramAddressSync(
@@ -91,6 +95,36 @@ export async function placePositionWithDelegation(
 
   // 5. Build and serialize Transaction
   const tx = new Transaction();
+
+  const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
+
+  // If vault mint is WSOL, automatically handle creation and wrapping of SOL
+  if (vaultMint.equals(WSOL_MINT)) {
+    const ataInfo = await connection.getAccountInfo(userTokenAccount);
+    if (!ataInfo) {
+      tx.add(
+        createAssociatedTokenAccountInstruction(
+          userWallet,
+          userTokenAccount,
+          userWallet,
+          WSOL_MINT
+        )
+      );
+    }
+
+    // Transfer SOL to the user's WSOL ATA
+    tx.add(
+      SystemProgram.transfer({
+        fromPubkey: userWallet,
+        toPubkey: userTokenAccount,
+        lamports: collateralAmount,
+      })
+    );
+
+    // Sync native to wrap the transferred SOL
+    tx.add(createSyncNativeInstruction(userTokenAccount));
+  }
+
   tx.add(placePositionInstruction);
   tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
   tx.feePayer = userWallet;

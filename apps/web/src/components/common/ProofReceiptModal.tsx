@@ -62,7 +62,7 @@ export function ProofReceiptModal({
             <div className="detail-item">
               <span className="detail-label">Solana Settlement Transaction</span>
               <a 
-                href={`https://explorer.solana.com/tx/${txSig}?cluster=custom&customUrl=http%3A%2F%2Flocalhost%3A8899`}
+                href={`https://explorer.solana.com/tx/${txSig}?cluster=devnet`}
                 target="_blank" 
                 rel="noreferrer"
                 className="detail-value link"
@@ -92,7 +92,7 @@ export function ProofReceiptModal({
           left: 0;
           width: 100vw;
           height: 100vh;
-          background: rgba(15, 23, 42, 0.75);
+          background: rgba(15, 23, 42, 0.4);
           backdrop-filter: blur(8px);
           display: flex;
           justify-content: center;
@@ -101,12 +101,12 @@ export function ProofReceiptModal({
         }
 
         .modal-content {
-          background: rgba(30, 41, 59, 0.9);
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: #ffffff;
+          border: 1px solid rgba(15, 23, 42, 0.08);
           border-radius: 24px;
           width: 100%;
           max-width: 520px;
-          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 40px rgba(99, 102, 241, 0.05);
+          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.08), 0 0 40px rgba(99, 102, 241, 0.02);
           display: flex;
           flex-direction: column;
           overflow: hidden;
@@ -118,7 +118,7 @@ export function ProofReceiptModal({
           justify-content: space-between;
           align-items: center;
           padding: 1.25rem 1.5rem;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+          border-bottom: 1px solid rgba(15, 23, 42, 0.08);
         }
 
         .header-title-wrapper {
@@ -128,13 +128,13 @@ export function ProofReceiptModal({
         }
 
         .header-icon {
-          color: #10b981;
+          color: #059669;
         }
 
         .modal-title {
           font-size: 1.15rem;
           font-weight: 700;
-          color: #f8fafc;
+          color: #0f172a;
         }
 
         .close-btn {
@@ -142,7 +142,7 @@ export function ProofReceiptModal({
           border: none;
           color: #64748b;
           cursor: pointer;
-          transition: color 0.2s ease;
+          transition: all 0.2s ease;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -152,8 +152,8 @@ export function ProofReceiptModal({
         }
 
         .close-btn:hover {
-          color: #f8fafc;
-          background: rgba(255, 255, 255, 0.05);
+          color: #0f172a;
+          background: rgba(15, 23, 42, 0.05);
         }
 
         .modal-body {
@@ -165,8 +165,8 @@ export function ProofReceiptModal({
 
         .status-banner {
           position: relative;
-          background: rgba(16, 185, 129, 0.06);
-          border: 1px solid rgba(16, 185, 129, 0.15);
+          background: rgba(16, 185, 129, 0.05);
+          border: 1px solid rgba(16, 185, 129, 0.2);
           border-radius: 16px;
           padding: 1rem 1.25rem;
           display: flex;
@@ -181,7 +181,7 @@ export function ProofReceiptModal({
           left: -20px;
           width: 80px;
           height: 80px;
-          background: radial-gradient(circle, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0) 70%);
+          background: radial-gradient(circle, rgba(16, 185, 129, 0.15) 0%, rgba(16, 185, 129, 0) 70%);
           pointer-events: none;
         }
 
@@ -194,17 +194,17 @@ export function ProofReceiptModal({
         .status-title {
           font-size: 0.95rem;
           font-weight: 700;
-          color: #10b981;
+          color: #059669;
         }
 
         .status-desc {
           font-size: 0.75rem;
-          color: #94a3b8;
+          color: #475569;
         }
 
         .details-card {
-          background: rgba(15, 23, 42, 0.4);
-          border: 1px solid rgba(255, 255, 255, 0.03);
+          background: rgba(15, 23, 42, 0.02);
+          border: 1px solid rgba(15, 23, 42, 0.05);
           border-radius: 16px;
           padding: 1.25rem;
           display: flex;
@@ -228,16 +228,16 @@ export function ProofReceiptModal({
 
         .detail-value {
           font-size: 0.9rem;
-          color: #e2e8f0;
+          color: #0f172a;
         }
 
         .detail-value.mono {
           font-family: monospace;
-          color: #38bdf8;
+          color: #4f46e5;
         }
 
         .detail-value.link {
-          color: #6366f1;
+          color: #4f46e5;
           display: inline-flex;
           align-items: center;
           gap: 0.3rem;
@@ -260,21 +260,21 @@ export function ProofReceiptModal({
 
         .trust-text {
           font-size: 0.75rem;
-          color: #94a3b8;
+          color: #475569;
           line-height: 1.4;
         }
 
         .modal-footer {
           padding: 1.25rem 1.5rem;
-          border-top: 1px solid rgba(255, 255, 255, 0.05);
+          border-top: 1px solid rgba(15, 23, 42, 0.08);
           display: flex;
           justify-content: flex-end;
         }
 
         .done-btn {
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          color: #f8fafc;
+          background: rgba(15, 23, 42, 0.05);
+          border: 1px solid rgba(15, 23, 42, 0.1);
+          color: #475569;
           padding: 0.6rem 1.2rem;
           border-radius: 10px;
           font-size: 0.85rem;
@@ -284,9 +284,9 @@ export function ProofReceiptModal({
         }
 
         .done-btn:hover {
-          background: rgba(255, 255, 255, 0.1);
-          border-color: rgba(255, 255, 255, 0.15);
-        }
+          background: rgba(15, 23, 42, 0.1);
+          border-color: rgba(15, 23, 42, 0.15);
+          color: #0f172a;
       `}</style>
     </div>
   );

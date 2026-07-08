@@ -66,9 +66,9 @@ export function LeaderboardTable() {
                 <td className="align-center rank-cell">{getRankIcon(entry.rank)}</td>
                 <td className="wallet-cell">{entry.wallet}</td>
                 <td>{getTierBadge(entry.tier)}</td>
-                <td className="align-right bold text-indigo-200">{entry.points} pts</td>
-                <td className="align-right text-emerald-400 bold">{entry.winRate}%</td>
-                <td className="align-right text-orange-400 bold">
+                <td className="align-right bold text-indigo-600">{entry.points} pts</td>
+                <td className="align-right text-emerald-600 bold">{entry.winRate}%</td>
+                <td className="align-right text-orange-600 bold">
                   {entry.streak > 0 ? `${entry.streak} W` : '-'}
                 </td>
               </tr>
@@ -79,14 +79,17 @@ export function LeaderboardTable() {
 
       <style jsx>{`
         .leaderboard-container {
-          background: rgba(30, 41, 59, 0.3);
-          border: 1px solid rgba(255, 255, 255, 0.05);
+          background: #ffffff;
+          border: 1px solid rgba(15, 23, 42, 0.08);
           border-radius: 20px;
           padding: 1.5rem;
-          backdrop-filter: blur(16px);
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
           display: flex;
           flex-direction: column;
           gap: 1.25rem;
+          width: 100%;
+          max-width: 100%;
+          overflow: hidden;
         }
 
         .leaderboard-header {
@@ -98,7 +101,7 @@ export function LeaderboardTable() {
         .leaderboard-title {
           font-size: 1.15rem;
           font-weight: 700;
-          color: #f8fafc;
+          color: #0f172a;
           letter-spacing: -0.02em;
         }
 
@@ -108,7 +111,9 @@ export function LeaderboardTable() {
         }
 
         .table-wrapper {
+          width: 100%;
           overflow-x: auto;
+          -webkit-overflow-scrolling: touch;
         }
 
         .leaderboard-table {
@@ -124,14 +129,14 @@ export function LeaderboardTable() {
           color: #64748b;
           text-transform: uppercase;
           letter-spacing: 0.05em;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+          border-bottom: 1px solid rgba(15, 23, 42, 0.08);
         }
 
         .leaderboard-table td {
           padding: 1rem;
           font-size: 0.85rem;
-          color: #cbd5e1;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+          color: #334155;
+          border-bottom: 1px solid rgba(15, 23, 42, 0.04);
         }
 
         .table-row {
@@ -139,7 +144,7 @@ export function LeaderboardTable() {
         }
 
         .table-row:hover {
-          background: rgba(255, 255, 255, 0.02);
+          background: rgba(0, 0, 0, 0.01);
         }
 
         .align-center {
@@ -170,7 +175,7 @@ export function LeaderboardTable() {
 
         .wallet-cell {
           font-family: monospace;
-          color: #38bdf8;
+          color: #4f46e5;
           font-weight: 600;
         }
 
@@ -183,25 +188,25 @@ export function LeaderboardTable() {
 
         .tier-badge.gold {
           background: rgba(234, 179, 8, 0.1);
-          color: #eab308;
+          color: #854d0e;
           border: 1px solid rgba(234, 179, 8, 0.2);
         }
 
         .tier-badge.silver {
           background: rgba(148, 163, 184, 0.1);
-          color: #cbd5e1;
+          color: #475569;
           border: 1px solid rgba(148, 163, 184, 0.2);
         }
 
         .tier-badge.bronze {
           background: rgba(217, 119, 6, 0.1);
-          color: #d97706;
+          color: #9a3412;
           border: 1px solid rgba(217, 119, 6, 0.2);
         }
 
         .tier-badge.starter {
           background: rgba(100, 116, 139, 0.1);
-          color: #64748b;
+          color: #475569;
           border: 1px solid rgba(100, 116, 139, 0.2);
         }
       `}</style>

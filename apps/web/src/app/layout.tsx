@@ -24,7 +24,9 @@ export default function RootLayout({
               </Link>
               <nav className="nav-links">
                 <Link href="/dashboard" className="nav-link">Markets</Link>
+                <Link href="/upcoming" className="nav-link">Upcoming</Link>
                 <Link href="/proof-vault" className="nav-link">Proof Vault</Link>
+                <Link href="/setup" className="nav-link">API Setup</Link>
               </nav>
               <WalletConnect />
             </div>

@@ -281,7 +281,7 @@ export default function MarketDetailPage({ params }: PageProps) {
         }
 
         .breadcrumb-active {
-          color: #94a3b8;
+          color: #475569;
         }
 
         .match-status-row {
@@ -301,47 +301,47 @@ export default function MarketDetailPage({ params }: PageProps) {
 
         .status-badge.live {
           background: rgba(239, 68, 68, 0.1);
-          color: #ef4444;
+          color: #dc2626;
           border: 1px solid rgba(239, 68, 68, 0.2);
         }
 
         .status-badge.finished {
           background: rgba(16, 185, 129, 0.1);
-          color: #10b981;
+          color: #059669;
           border: 1px solid rgba(16, 185, 129, 0.2);
         }
 
         .status-badge.scheduled {
           background: rgba(99, 102, 241, 0.1);
-          color: #6366f1;
+          color: #4f46e5;
           border: 1px solid rgba(99, 102, 241, 0.2);
         }
 
         .status-score {
           font-size: 1.15rem;
           font-weight: 700;
-          color: #f8fafc;
+          color: #0f172a;
           font-family: monospace;
         }
 
         .detail-layout {
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          grid-template-columns: 1fr;
           gap: 2rem;
         }
 
-        @media (max-width: 768px) {
+        @media (min-width: 769px) {
           .detail-layout {
-            grid-template-columns: 1fr;
+            grid-template-columns: 1fr 1fr;
           }
         }
 
         .resolved-status-card {
-          background: rgba(30, 41, 59, 0.3);
-          border: 1px solid rgba(255, 255, 255, 0.05);
+          background: #ffffff;
+          border: 1px solid rgba(15, 23, 42, 0.08);
           border-radius: 20px;
           padding: 2rem;
-          backdrop-filter: blur(16px);
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
           display: flex;
           flex-direction: column;
           align-items: center;
@@ -350,24 +350,24 @@ export default function MarketDetailPage({ params }: PageProps) {
         }
 
         .resolved-icon {
-          color: #10b981;
+          color: #059669;
         }
 
         .resolved-title {
           font-size: 1.25rem;
           font-weight: 700;
-          color: #f8fafc;
+          color: #0f172a;
         }
 
         .resolved-desc {
           font-size: 0.85rem;
-          color: #94a3b8;
+          color: #475569;
           line-height: 1.5;
         }
 
         .resolution-details {
           width: 100%;
-          background: rgba(15, 23, 42, 0.4);
+          background: rgba(15, 23, 42, 0.02);
           border-radius: 12px;
           padding: 1rem;
           display: flex;
@@ -383,7 +383,7 @@ export default function MarketDetailPage({ params }: PageProps) {
         }
 
         .res-row .bold {
-          color: #e2e8f0;
+          color: #0f172a;
           font-weight: 700;
         }
 
@@ -398,14 +398,14 @@ export default function MarketDetailPage({ params }: PageProps) {
         }
 
         .proof-btn {
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          color: #cbd5e1;
+          background: rgba(15, 23, 42, 0.05);
+          border: 1px solid rgba(15, 23, 42, 0.1);
+          color: #475569;
         }
 
         .proof-btn:hover {
-          background: rgba(255, 255, 255, 0.1);
-          color: #ffffff;
+          background: rgba(15, 23, 42, 0.1);
+          color: #0f172a;
         }
 
         .claim-payout-btn {
@@ -423,7 +423,7 @@ export default function MarketDetailPage({ params }: PageProps) {
         .claimed-badge {
           background: rgba(16, 185, 129, 0.1);
           border: 1px solid rgba(16, 185, 129, 0.2);
-          color: #10b981;
+          color: #059669;
           font-weight: 700;
           padding: 0.75rem;
           border-radius: 12px;
@@ -431,10 +431,11 @@ export default function MarketDetailPage({ params }: PageProps) {
         }
 
         .pool-stats-card, .user-position-card {
-          background: rgba(30, 41, 59, 0.2);
-          border: 1px solid rgba(255, 255, 255, 0.03);
+          background: #ffffff;
+          border: 1px solid rgba(15, 23, 42, 0.08);
           border-radius: 20px;
           padding: 1.5rem;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
           display: flex;
           flex-direction: column;
           gap: 1.25rem;
@@ -443,12 +444,12 @@ export default function MarketDetailPage({ params }: PageProps) {
         .stats-title {
           font-size: 1.05rem;
           font-weight: 700;
-          color: #f8fafc;
+          color: #0f172a;
         }
 
         .pool-progress-bar {
           height: 8px;
-          background: rgba(15, 23, 42, 0.6);
+          background: rgba(15, 23, 42, 0.05);
           border-radius: 9999px;
           overflow: hidden;
           display: flex;
@@ -486,27 +487,27 @@ export default function MarketDetailPage({ params }: PageProps) {
         .legend-dot.away { background-color: #0ea5e9; }
 
         .item-label {
-          color: #94a3b8;
+          color: #64748b;
           flex: 1;
         }
 
         .item-val {
-          color: #f8fafc;
+          color: #0f172a;
           font-weight: 600;
         }
 
         .total-pool-row {
-          border-top: 1px solid rgba(255, 255, 255, 0.05);
+          border-top: 1px solid rgba(15, 23, 42, 0.08);
           padding-top: 1rem;
           display: flex;
           justify-content: space-between;
           font-size: 0.95rem;
-          color: #f8fafc;
+          color: #0f172a;
           font-weight: 700;
         }
 
         .total-val {
-          color: #818cf8;
+          color: #4f46e5;
         }
 
         .position-grid {
@@ -516,7 +517,7 @@ export default function MarketDetailPage({ params }: PageProps) {
         }
 
         .pos-item {
-          background: rgba(15, 23, 42, 0.3);
+          background: rgba(15, 23, 42, 0.02);
           padding: 0.85rem;
           border-radius: 12px;
           display: flex;
@@ -533,11 +534,11 @@ export default function MarketDetailPage({ params }: PageProps) {
         .pos-val {
           font-size: 0.9rem;
           font-weight: 700;
-          color: #e2e8f0;
+          color: #0f172a;
         }
 
-        .pos-val.active { color: #818cf8; }
-        .pos-val.claimed { color: #10b981; }
+        .pos-val.active { color: #4f46e5; }
+        .pos-val.claimed { color: #059669; }
 
         .market-loading-wrapper {
           display: flex;

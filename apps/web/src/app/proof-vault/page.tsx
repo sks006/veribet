@@ -108,7 +108,7 @@ export default function ProofVaultPage() {
                     <span>Crank Gas Rebates Paid: {((market.account.totalFeesCollected.toNumber() || 5000000) / 1e9).toFixed(3)} SOL</span>
                   </div>
                   <a 
-                    href={`https://explorer.solana.com/address/${market.publicKey.toBase58()}?cluster=custom&customUrl=http%3A%2F%2Flocalhost%3A8899`}
+                    href={`https://explorer.solana.com/address/${market.publicKey.toBase58()}?cluster=devnet`}
                     target="_blank" 
                     rel="noreferrer"
                     className="audit-link"
@@ -143,11 +143,11 @@ export default function ProofVaultPage() {
 
         .search-input {
           width: 100%;
-          background: rgba(30, 41, 59, 0.2);
-          border: 1px solid rgba(255, 255, 255, 0.05);
+          background: #ffffff;
+          border: 1px solid rgba(15, 23, 42, 0.08);
           border-radius: 14px;
           padding: 0.85rem 1rem 0.85rem 2.75rem;
-          color: #ffffff;
+          color: #0f172a;
           outline: none;
           font-size: 0.9rem;
           transition: all 0.2s ease;
@@ -155,7 +155,7 @@ export default function ProofVaultPage() {
 
         .search-input:focus {
           border-color: #6366f1;
-          box-shadow: 0 0 10px rgba(99, 102, 241, 0.15);
+          box-shadow: 0 0 10px rgba(99, 102, 241, 0.1);
         }
 
         .proofs-list {
@@ -165,11 +165,11 @@ export default function ProofVaultPage() {
         }
 
         .proof-item-card {
-          background: rgba(30, 41, 59, 0.3);
-          border: 1px solid rgba(255, 255, 255, 0.05);
+          background: #ffffff;
+          border: 1px solid rgba(15, 23, 42, 0.08);
           border-radius: 16px;
           padding: 1.25rem;
-          backdrop-filter: blur(12px);
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
           display: flex;
           flex-direction: column;
           gap: 1rem;
@@ -177,8 +177,8 @@ export default function ProofVaultPage() {
         }
 
         .proof-item-card:hover {
-          border-color: rgba(99, 102, 241, 0.2);
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+          border-color: rgba(99, 102, 241, 0.3);
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
         }
 
         .proof-item-header {
@@ -187,7 +187,7 @@ export default function ProofVaultPage() {
           align-items: center;
           flex-wrap: wrap;
           gap: 0.5rem;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+          border-bottom: 1px solid rgba(15, 23, 42, 0.08);
           padding-bottom: 0.75rem;
         }
 
@@ -198,9 +198,9 @@ export default function ProofVaultPage() {
         }
 
         .match-id-badge {
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          color: #cbd5e1;
+          background: rgba(15, 23, 42, 0.04);
+          border: 1px solid rgba(15, 23, 42, 0.08);
+          color: #475569;
           font-size: 0.75rem;
           font-weight: 700;
           padding: 0.2rem 0.5rem;
@@ -214,7 +214,7 @@ export default function ProofVaultPage() {
           gap: 0.3rem;
           font-size: 0.75rem;
           font-weight: 600;
-          color: #10b981;
+          color: #059669;
         }
 
         .market-pda-text {
@@ -229,16 +229,16 @@ export default function ProofVaultPage() {
 
         .proof-details-grid {
           display: grid;
-          grid-template-columns: repeat(4, 1fr);
+          grid-template-columns: 1fr;
           gap: 1rem;
         }
 
-        @media (max-width: 768px) {
+        @media (min-width: 769px) {
           .proof-details-grid {
-            grid-template-columns: 1fr;
+            grid-template-columns: repeat(4, 1fr);
           }
           .grid-item.span-2 {
-            grid-column: span 1 !important;
+            grid-column: span 2;
           }
         }
 
@@ -262,12 +262,12 @@ export default function ProofVaultPage() {
 
         .grid-val {
           font-size: 0.85rem;
-          color: #e2e8f0;
+          color: #0f172a;
         }
 
         .grid-val.mono {
           font-family: monospace;
-          color: #38bdf8;
+          color: #4f46e5;
         }
 
         .grid-val.bold {
@@ -275,7 +275,7 @@ export default function ProofVaultPage() {
         }
 
         .proof-item-footer {
-          border-top: 1px solid rgba(255, 255, 255, 0.05);
+          border-top: 1px solid rgba(15, 23, 42, 0.08);
           padding-top: 0.75rem;
           display: flex;
           justify-content: space-between;
@@ -291,7 +291,7 @@ export default function ProofVaultPage() {
         }
 
         .audit-link {
-          color: #6366f1;
+          color: #4f46e5;
           display: flex;
           align-items: center;
           gap: 0.25rem;
@@ -304,8 +304,8 @@ export default function ProofVaultPage() {
         }
 
         .loading-state, .empty-state {
-          background: rgba(30, 41, 59, 0.15);
-          border: 1px solid rgba(255, 255, 255, 0.03);
+          background: #ffffff;
+          border: 1px solid rgba(15, 23, 42, 0.08);
           border-radius: 20px;
           padding: 3rem;
           text-align: center;

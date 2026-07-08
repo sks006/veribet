@@ -17,6 +17,7 @@ export default function DashboardPage() {
   const { publicKey } = useWallet();
   const [onChainMarkets, setOnChainMarkets] = useState<any[]>([]);
   const [loadingMarkets, setLoadingMarkets] = useState(true);
+  const [inputValue, setInputValue] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [creatingMarket, setCreatingMarket] = useState<string | null>(null);
 
@@ -40,15 +41,25 @@ export default function DashboardPage() {
     fetchOnChainMarkets();
   }, [program]);
 
-  // Find corresponding market PDA and state for a match
-  const getMatchMarket = (matchId: string) => {
-    return onChainMarkets.find((market) => {
+  // Debounce search term update
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setSearchTerm(inputValue);
+    }, 250);
+    return () => clearTimeout(handler);
+  }, [inputValue]);
+
+  // Memoize market map lookup for O(1) rendering checks
+  const marketMap = React.useMemo(() => {
+    const map = new Map<string, any>();
+    onChainMarkets.forEach((market) => {
       const matchIdStr = Buffer.from(market.account.matchIdBytes)
         .toString('utf8')
         .replace(/\0/g, '');
-      return matchIdStr === matchId;
+      map.set(matchIdStr, market);
     });
-  };
+    return map;
+  }, [onChainMarkets]);
 
   // Create a prediction market on-chain for a match
   const handleCreateMarket = async (matchId: string) => {
@@ -106,12 +117,14 @@ export default function DashboardPage() {
     }
   };
 
-  // Filter matches
-  const filteredMatches = matches.filter((m) =>
-    m.homeTeam.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    m.awayTeam.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    m.id.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // Memoize filtered matches to avoid re-calculating on every render
+  const filteredMatches = React.useMemo(() => {
+    return matches.filter((m) =>
+      m.homeTeam.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      m.awayTeam.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      m.id.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [matches, searchTerm]);
 
   return (
     <div className="dashboard-page">
@@ -131,8 +144,8 @@ export default function DashboardPage() {
           type="text"
           placeholder="Search by team or match identifier..."
           className="search-input"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
         />
       </div>
 
@@ -150,7 +163,7 @@ export default function DashboardPage() {
           ) : (
             <div className="cards-grid">
               {filteredMatches.map((match) => {
-                const onChainMarket = getMatchMarket(match.id);
+                const onChainMarket = marketMap.get(match.id);
                 return (
                   <div key={match.id} className="market-item-card">
                     <MatchCard match={match} market={onChainMarket?.account} />
@@ -201,9 +214,9 @@ export default function DashboardPage() {
         }
 
         .refresh-btn {
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          color: #cbd5e1;
+          background: rgba(15, 23, 42, 0.05);
+          border: 1px solid rgba(15, 23, 42, 0.1);
+          color: #475569;
           font-size: 0.85rem;
           font-weight: 600;
           padding: 0.5rem 1rem;
@@ -216,8 +229,8 @@ export default function DashboardPage() {
         }
 
         .refresh-btn:hover {
-          background: rgba(255, 255, 255, 0.1);
-          color: #ffffff;
+          background: rgba(15, 23, 42, 0.1);
+          color: #0f172a;
         }
 
         .search-bar-wrapper {
@@ -234,11 +247,11 @@ export default function DashboardPage() {
 
         .search-input {
           width: 100%;
-          background: rgba(30, 41, 59, 0.2);
-          border: 1px solid rgba(255, 255, 255, 0.05);
+          background: #ffffff;
+          border: 1px solid rgba(15, 23, 42, 0.08);
           border-radius: 14px;
           padding: 0.85rem 1rem 0.85rem 2.75rem;
-          color: #ffffff;
+          color: #0f172a;
           outline: none;
           font-size: 0.9rem;
           transition: all 0.2s ease;
@@ -246,19 +259,19 @@ export default function DashboardPage() {
 
         .search-input:focus {
           border-color: #6366f1;
-          background: rgba(30, 41, 59, 0.3);
-          box-shadow: 0 0 10px rgba(99, 102, 241, 0.15);
+          box-shadow: 0 0 10px rgba(99, 102, 241, 0.1);
         }
 
         .dashboard-grid {
           display: grid;
-          grid-template-columns: 2fr 1fr;
+          grid-template-columns: 1fr;
           gap: 2rem;
+          min-width: 0;
         }
 
-        @media (max-width: 968px) {
+        @media (min-width: 969px) {
           .dashboard-grid {
-            grid-template-columns: 1fr;
+            grid-template-columns: 2fr 1fr;
           }
         }
 
@@ -266,6 +279,11 @@ export default function DashboardPage() {
           display: flex;
           flex-direction: column;
           gap: 1.5rem;
+          min-width: 0;
+        }
+
+        .sidebar-column {
+          min-width: 0;
         }
 
         .cards-grid {
@@ -280,20 +298,19 @@ export default function DashboardPage() {
 
         .initialize-market-overlay {
           margin-top: 0.75rem;
-          background: rgba(99, 102, 241, 0.04);
-          border: 1px dashed rgba(99, 102, 241, 0.3);
+          background: rgba(99, 102, 241, 0.02);
+          border: 1px dashed rgba(99, 102, 241, 0.2);
           border-radius: 12px;
           padding: 1rem;
           display: flex;
-          justify-content: space-between;
-          align-items: center;
-          flex-wrap: wrap;
+          flex-direction: column;
+          align-items: stretch;
           gap: 0.75rem;
         }
 
         .overlay-text {
           font-size: 0.8rem;
-          color: #94a3b8;
+          color: #475569;
           font-weight: 500;
         }
 
@@ -309,6 +326,18 @@ export default function DashboardPage() {
           transition: all 0.2s ease;
           display: flex;
           align-items: center;
+          justify-content: center;
+        }
+
+        @media (min-width: 576px) {
+          .initialize-market-overlay {
+            flex-direction: row;
+            justify-content: space-between;
+            align-items: center;
+          }
+          .initialize-pool-btn {
+            justify-content: flex-start;
+          }
         }
 
         .initialize-pool-btn:hover:not(:disabled) {
@@ -317,14 +346,14 @@ export default function DashboardPage() {
         }
 
         .initialize-pool-btn:disabled {
-          background: rgba(255, 255, 255, 0.05);
+          background: rgba(15, 23, 42, 0.05);
           color: #64748b;
           cursor: not-allowed;
         }
 
         .loading-state, .empty-state {
-          background: rgba(30, 41, 59, 0.15);
-          border: 1px solid rgba(255, 255, 255, 0.03);
+          background: #ffffff;
+          border: 1px solid rgba(15, 23, 42, 0.08);
           border-radius: 20px;
           padding: 3rem;
           text-align: center;

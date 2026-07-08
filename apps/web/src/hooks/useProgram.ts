@@ -4,7 +4,7 @@ import * as anchor from '@coral-xyz/anchor';
 import { useAnchorWallet, useConnection } from '@solana/wallet-adapter-react';
 import idlJson from '../../../../target/idl/veribet.json';
 
-const PROGRAM_ID = new PublicKey('2GGEMRrbf2E6CLBYGU47p42aCa7cByknAVwcrTUMoLUo');
+const PROGRAM_ID = new PublicKey('2Syq46YQQ4iGbCouFYxjeHEcABScMd669NAK5XrxZFWG');
 
 export function useProgram() {
   const { connection } = useConnection();

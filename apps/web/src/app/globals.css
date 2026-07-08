@@ -1,10 +1,10 @@
 
 :root {
-  --background: #15191d;
-  --foreground: #f8fafc;
-  --card-bg: rgba(30, 36, 40, 1);
-  --border-color: rgba(255, 255, 255, 0.05);
-  --accent-color: #e1e2f3;
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card-bg: #ffffff;
+  --border-color: rgba(15, 23, 42, 0.08);
+  --accent-color: #6366f1;
 }
 
 * {
@@ -30,7 +30,7 @@ body {
 
 .app-header {
   border-bottom: 1px solid var(--border-color);
-  background: rgba(15, 23, 42, 0.6);
+  background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(12px);
   position: sticky;
   top: 0;
@@ -40,10 +40,11 @@ body {
 .nav-container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 1rem 1.5rem;
+  padding: 1rem;
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: center;
+  gap: 1rem;
 }
 
 .logo-wrapper {
@@ -53,15 +54,15 @@ body {
 }
 
 .logo-text {
-  font-size: 1.5rem;
+  font-size: 1.35rem;
   font-weight: 900;
   letter-spacing: -0.05em;
-  color: #ffffff;
+  color: #0f172a;
 }
 
 .logo-accent {
   color: #6366f1;
-  text-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+  text-shadow: 0 0 10px rgba(99, 102, 241, 0.2);
 }
 
 .nav-links {
@@ -70,7 +71,7 @@ body {
 }
 
 .nav-link {
-  color: #94a3b8;
+  color: #475569;
   text-decoration: none;
   font-size: 0.9rem;
   font-weight: 600;
@@ -78,7 +79,7 @@ body {
 }
 
 .nav-link:hover {
-  color: #ffffff;
+  color: #0f172a;
 }
 
 .app-main {
@@ -86,14 +87,14 @@ body {
   max-width: 1200px;
   width: 100%;
   margin: 0 auto;
-  padding: 2rem 1.5rem;
+  padding: 1.5rem 1rem;
 }
 
 .app-footer {
   border-top: 1px solid var(--border-color);
   padding: 1.5rem;
   text-align: center;
-  background: rgba(15, 23, 42, 0.4);
+  background: rgba(255, 255, 255, 0.8);
 }
 
 .footer-text {
@@ -103,17 +104,39 @@ body {
 
 /* Page Headers */
 .page-title {
-  font-size: 2.25rem;
+  font-size: 1.75rem;
   font-weight: 800;
   letter-spacing: -0.03em;
-  background: linear-gradient(to right, #ffffff, #94a3b8);
+  background: linear-gradient(to right, #0f172a, #334155);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 0.5rem;
 }
 
 .page-subtitle {
-  font-size: 1rem;
-  color: #94a3b8;
-  margin-bottom: 2rem;
+  font-size: 0.95rem;
+  color: #475569;
+  margin-bottom: 1.5rem;
+}
+
+@media (min-width: 769px) {
+  .nav-container {
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 1rem 1.5rem;
+    gap: 0;
+  }
+  .logo-text {
+    font-size: 1.5rem;
+  }
+  .app-main {
+    padding: 2rem 1.5rem;
+  }
+  .page-title {
+    font-size: 2.25rem;
+  }
+  .page-subtitle {
+    font-size: 1rem;
+    margin-bottom: 2rem;
+  }
 }

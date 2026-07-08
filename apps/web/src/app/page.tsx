@@ -87,41 +87,41 @@ export default function LandingPage() {
           top: -150px;
           width: 500px;
           height: 300px;
-          background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, rgba(99, 102, 241, 0) 70%);
+          background: radial-gradient(circle, rgba(99, 102, 241, 0.08) 0%, rgba(99, 102, 241, 0) 70%);
           z-index: -1;
           pointer-events: none;
         }
 
         .hero-badge {
-          background: rgba(99, 102, 241, 0.08);
-          border: 1px solid rgba(99, 102, 241, 0.2);
+          background: rgba(99, 102, 241, 0.05);
+          border: 1px solid rgba(99, 102, 241, 0.15);
           border-radius: 9999px;
           padding: 0.35rem 0.85rem;
           font-size: 0.8rem;
           font-weight: 600;
-          color: #a5b4fc;
+          color: #4f46e5;
           display: flex;
           align-items: center;
           gap: 0.4rem;
         }
 
         .hero-title {
-          font-size: 3.5rem;
+          font-size: 2.5rem;
           font-weight: 900;
           line-height: 1.1;
           letter-spacing: -0.04em;
-          color: #ffffff;
+          color: #0f172a;
         }
 
         .hero-title-gradient {
-          background: linear-gradient(135deg, #6366f1 0%, #38bdf8 100%);
+          background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%);
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
         }
 
         .hero-desc {
           font-size: 1.15rem;
-          color: #94a3b8;
+          color: #475569;
           line-height: 1.6;
           max-width: 650px;
         }
@@ -151,56 +151,58 @@ export default function LandingPage() {
         }
 
         .secondary-btn {
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          color: #cbd5e1;
+          background: #ffffff;
+          border: 1px solid rgba(15, 23, 42, 0.1);
+          color: #475569;
           font-size: 0.95rem;
           font-weight: 700;
           padding: 0.95rem 1.8rem;
           border-radius: 12px;
           text-decoration: none;
           transition: all 0.2s ease;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.02);
         }
 
         .secondary-btn:hover {
-          background: rgba(255, 255, 255, 0.1);
-          color: #ffffff;
+          background: rgba(15, 23, 42, 0.02);
+          color: #0f172a;
         }
 
         .features-grid {
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
+          grid-template-columns: 1fr;
           gap: 2rem;
         }
 
-        @media (max-width: 768px) {
-          .features-grid {
-            grid-template-columns: 1fr;
-          }
+        @media (min-width: 769px) {
           .hero-title {
-            font-size: 2.5rem;
+            font-size: 3.5rem;
+          }
+          .features-grid {
+            grid-template-columns: repeat(3, 1fr);
           }
         }
 
         .feature-card {
-          background: rgba(30, 41, 59, 0.2);
-          border: 1px solid rgba(255, 255, 255, 0.03);
+          background: #ffffff;
+          border: 1px solid rgba(15, 23, 42, 0.08);
           border-radius: 20px;
           padding: 2rem;
           display: flex;
           flex-direction: column;
           gap: 1rem;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
           transition: all 0.3s ease;
         }
 
         .feature-card:hover {
-          background: rgba(30, 41, 59, 0.3);
-          border-color: rgba(99, 102, 241, 0.2);
+          border-color: rgba(99, 102, 241, 0.3);
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
         }
 
         .feature-icon-wrapper {
-          background: rgba(99, 102, 241, 0.1);
-          border: 1px solid rgba(99, 102, 241, 0.2);
+          background: rgba(99, 102, 241, 0.05);
+          border: 1px solid rgba(99, 102, 241, 0.15);
           width: 48px;
           height: 48px;
           border-radius: 12px;
@@ -210,13 +212,13 @@ export default function LandingPage() {
         }
 
         .feature-icon {
-          color: #818cf8;
+          color: #4f46e5;
         }
 
         .feature-name {
           font-size: 1.15rem;
           font-weight: 700;
-          color: #f8fafc;
+          color: #0f172a;
         }
 
         .feature-desc {

@@ -3,7 +3,13 @@ import { Connection, Keypair, Transaction, VersionedTransaction } from '@solana/
 import * as fs from 'fs';
 import * as path from 'path';
 
+let cachedAuthorityKeypair: Keypair | null = null;
+
 function getDelegatedAuthorityKeypair(): Keypair {
+  if (cachedAuthorityKeypair) {
+    return cachedAuthorityKeypair;
+  }
+
   const envPath = process.env.AUTHORITY_KEY_PATH;
   if (envPath) {
     try {
@@ -11,15 +17,16 @@ function getDelegatedAuthorityKeypair(): Keypair {
       if (fs.existsSync(resolvedPath)) {
         const raw = fs.readFileSync(resolvedPath, 'utf8');
         const secret = Uint8Array.from(JSON.parse(raw));
-        return Keypair.fromSecretKey(secret);
+        cachedAuthorityKeypair = Keypair.fromSecretKey(secret);
+        return cachedAuthorityKeypair;
       }
     } catch (e) {
       console.warn('[Authorize API] Failed to load keypair from AUTHORITY_KEY_PATH, generating fallback.');
     }
   }
 
-  const fallbackKey = Keypair.generate();
-  return fallbackKey;
+  cachedAuthorityKeypair = Keypair.generate();
+  return cachedAuthorityKeypair;
 }
 
 export async function POST(req: NextRequest) {
@@ -27,11 +34,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { transactionHex, isVersioned } = body;
 
-    if (!transactionHex) {
-      return NextResponse.json({ error: 'Missing transaction hex' }, { status: 400 });
+    const authorityKeypair = getDelegatedAuthorityKeypair();
+
+    if (!transactionHex || transactionHex === '00') {
+      return NextResponse.json({
+        success: true,
+        authorizedBy: authorityKeypair.publicKey.toBase58()
+      });
     }
 
-    const authorityKeypair = getDelegatedAuthorityKeypair();
     console.log(`[Authorize API] Authorizing transaction using key: ${authorityKeypair.publicKey.toBase58()}`);
 
     const buffer = Buffer.from(transactionHex, 'hex');
