@@ -13,6 +13,7 @@ interface PredictionFormProps {
   onSuccess?: (txSig: string) => void;
   kickoffTime?: number;
   status?: string;
+  statusId?: number;
 }
 
 export function PredictionForm({
@@ -22,7 +23,8 @@ export function PredictionForm({
   awayTeam,
   onSuccess,
   kickoffTime,
-  status
+  status,
+  statusId
 }: PredictionFormProps) {
   const { connection } = useConnection();
   const { publicKey, signTransaction } = useWallet();
@@ -35,8 +37,11 @@ export function PredictionForm({
   const [error, setError] = useState<string | null>(null);
 
   // Time gating validation logic
+  // Status Evaluation: If statusId evaluates to anything other than 1 (NS - Not Started), disable the submission interface
+  const isStatusClosed = statusId !== undefined ? statusId !== 1 : (status ? status !== 'SCHEDULED' : false);
+  
+  // Temporal Evaluation: Evaluate current time against kickoffTime (startTime)
   const isTimeClosed = kickoffTime ? Date.now() >= kickoffTime : false;
-  const isStatusClosed = status ? status !== 'SCHEDULED' : false;
   const isWindowClosed = isTimeClosed || isStatusClosed;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -186,7 +191,7 @@ export function PredictionForm({
         <div className="breakdown-divider"></div>
         <div className="breakdown-row total">
           <span>Total Required</span>
-          <span className="text-indigo-400 bold">
+          <span className="total-highlight bold">
             {(parseFloat(collateral || '0') + 0.005).toFixed(3)} SOL
           </span>
         </div>
@@ -274,33 +279,21 @@ export function PredictionForm({
         }
 
         .select-btn:hover {
-          background: rgba(99, 102, 241, 0.05);
-          border-color: rgba(99, 102, 241, 0.2);
+          background: rgba(9, 9, 11, 0.04);
+          border-color: rgba(9, 9, 11, 0.1);
         }
 
         .select-btn.active {
-          background: rgba(99, 102, 241, 0.08);
-          border-color: #6366f1;
-          box-shadow: 0 0 12px rgba(99, 102, 241, 0.15);
+          background: #09090b;
+          border-color: #09090b;
         }
 
-        .btn-team-name {
-          font-size: 0.85rem;
-          font-weight: 700;
-          color: #0f172a;
-          text-overflow: ellipsis;
-          overflow: hidden;
-          white-space: nowrap;
-          max-width: 100%;
-        }
-
-        .btn-label {
-          font-size: 0.65rem;
-          color: #64748b;
+        .select-btn.active .btn-team-name {
+          color: #ffffff;
         }
 
         .select-btn.active .btn-label {
-          color: #4f46e5;
+          color: rgba(255, 255, 255, 0.7);
         }
 
         .input-wrapper {
@@ -329,8 +322,8 @@ export function PredictionForm({
         }
 
         .collateral-input:focus {
-          border-color: #6366f1;
-          box-shadow: 0 0 10px rgba(99, 102, 241, 0.1);
+          border-color: #09090b;
+          box-shadow: 0 0 0 2px rgba(9, 9, 11, 0.05);
         }
 
         .input-suffix {
@@ -353,7 +346,7 @@ export function PredictionForm({
         }
 
         .tier-select:focus {
-          border-color: #6366f1;
+          border-color: #09090b;
         }
 
         .breakdown-card {
@@ -412,22 +405,25 @@ export function PredictionForm({
           pointer-events: none;
         }
 
+        .total-highlight {
+          color: #09090b;
+        }
+
         .submit-btn {
-          background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-          border: none;
+          background: #09090b;
+          border: 1px solid #09090b;
           color: #ffffff;
           font-size: 0.95rem;
           font-weight: 700;
           padding: 0.95rem;
-          border-radius: 12px;
+          border-radius: 8px;
           cursor: pointer;
           transition: all 0.2s ease;
-          box-shadow: 0 4px 15px rgba(79, 70, 229, 0.3);
         }
 
         .submit-btn:hover:not(:disabled) {
-          transform: translateY(-2px);
-          box-shadow: 0 6px 20px rgba(79, 70, 229, 0.4);
+          background: #18181b;
+          border-color: #18181b;
         }
 
         .submit-btn:disabled {

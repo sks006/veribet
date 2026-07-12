@@ -6,6 +6,9 @@ export interface TxLineEvent {
   totalStats: number;    // e.g. corner count, total goals, or yellow cards
   timestamp: number;
   signature: string;     // Hex-encoded cryptographic signature
+  eventType?: 'foul' | 'red_card' | 'yellow_card' | 'corner' | 'free_kick';
+  team?: 0 | 1;          // 0 = Home (A), 1 = Away (B)
+  matchMinute?: number;
 }
 
 export interface CrankConfig {

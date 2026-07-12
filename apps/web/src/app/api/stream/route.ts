@@ -99,7 +99,7 @@ async function fetchGuestJwt(apiOrigin: string): Promise<string> {
 
 function addFlagEmojiIfMissing(teamName: string): string {
   if (!teamName) return '';
-  if (teamName.includes('🇦🇷') || teamName.includes('🇫🇷') || teamName.includes('🇧🇷') || teamName.includes('🇩🇪') || teamName.includes('🇺🇸') || teamName.includes('🇲🇽') || teamName.includes('🏴󠁧󠁢󠁥󠁮󠁧󠁿') || teamName.includes('🇮🇹') || teamName.includes('🇪🇸') || teamName.includes('🇵🇹')) {
+  if (teamName.includes('🇦🇷') || teamName.includes('🇫🇷') || teamName.includes('🇧🇷') || teamName.includes('🇩🇪') || teamName.includes('🇺🇸') || teamName.includes('🇲🇽') || teamName.includes('🏴󠁧󠁢󠁥󠁮󠁧󠁿') || teamName.includes('🇮🇹') || teamName.includes('🇪🇸') || teamName.includes('🇵🇹') || teamName.includes('🇨🇭')) {
     return teamName;
   }
   const lower = teamName.toLowerCase();
@@ -113,6 +113,7 @@ function addFlagEmojiIfMissing(teamName: string): string {
   if (lower.includes('italy')) return 'Italy 🇮🇹';
   if (lower.includes('spain')) return 'Spain 🇪🇸';
   if (lower.includes('portugal')) return 'Portugal 🇵🇹';
+  if (lower.includes('switzerland')) return 'Switzerland 🇨🇭';
   return teamName;
 }
 
@@ -200,15 +201,15 @@ function processTxOddsOracleTick(rawPacketPayload: string): void {
     } else {
       // 6. SCORE MUTATION:
       // Mutate scores if and only if update has scores object
-      if (update.Scores) {
-        state.scores.homeScore = update.Scores.Participant1 ?? state.scores.homeScore;
-        state.scores.awayScore = update.Scores.Participant2 ?? state.scores.awayScore;
-        state.totalStats = state.scores.homeScore + state.scores.awayScore;
-      }
-      
-      // 7. STATUS MUTATION:
-      if (update.StatusId !== undefined) {
-        state.statusId = update.StatusId;
+        if (update.Scores) {
+          state.scores.homeScore = update.Scores.Participant1 ?? state.scores.homeScore;
+          state.scores.awayScore = update.Scores.Participant2 ?? state.scores.awayScore;
+          state.totalStats = state.scores.homeScore + state.scores.awayScore;
+        }
+        
+        // 7. STATUS MUTATION:
+        if (update.StatusId !== undefined) {
+          state.statusId = update.StatusId;
       }
       
       state.lastTickTimestamp = Date.now();
@@ -223,6 +224,7 @@ function processTxOddsOracleTick(rawPacketPayload: string): void {
     const snapshot = {
       matchId: state.id,
       status: statusStr,
+      statusId: state.statusId,
       homeScore: state.scores.homeScore,
       awayScore: state.scores.awayScore,
       totalStats: state.totalStats,
@@ -492,6 +494,68 @@ async function tryConnectTxline() {
 // REST Endpoint Setup & Client Synchronization
 // -------------------------------------------------------------
 
+function parseSseBlock(block: string): { data: string } | null {
+  const message = { data: "" };
+  for (const rawLine of block.split(/\r?\n/)) {
+    if (!rawLine || rawLine.startsWith(":")) continue;
+    const separatorIndex = rawLine.indexOf(":");
+    const field = separatorIndex === -1 ? rawLine : rawLine.slice(0, separatorIndex);
+    const value = separatorIndex === -1 ? "" : rawLine.slice(separatorIndex + 1).replace(/^ /, "");
+    if (field === "data") message.data += `${value}\n`;
+  }
+  message.data = message.data.replace(/\n$/, "");
+  return message.data ? message : null;
+}
+
+async function fetchLatestScoreForFixture(
+  fixtureId: string,
+  jwt: string,
+  apiToken: string,
+  apiOrigin: string
+): Promise<{ homeScore: number; awayScore: number; statusId: number } | null> {
+  const headers = {
+    'Authorization': `Bearer ${jwt}`,
+    'X-Api-Token': apiToken
+  };
+
+  const url = `${apiOrigin}/api/scores/historical/${fixtureId}`;
+  try {
+    const res = await fetch(url, { method: 'GET', headers });
+    if (res.status !== 200) {
+      return null;
+    }
+    const text = await res.text();
+    const blocks = text.split(/\n\n+/);
+    let lastValidMessage: any = null;
+
+    for (const block of blocks) {
+      if (!block.trim()) continue;
+      const parsed = parseSseBlock(block);
+      if (parsed && parsed.data) {
+        try {
+          lastValidMessage = JSON.parse(parsed.data);
+        } catch {}
+      }
+    }
+
+    if (lastValidMessage) {
+      const homeScore = lastValidMessage.Stats?.["1"] ?? lastValidMessage.Score?.Participant1?.Total?.Goals ?? 0;
+      const awayScore = lastValidMessage.Stats?.["2"] ?? lastValidMessage.Score?.Participant2?.Total?.Goals ?? 0;
+      const isFinal = lastValidMessage.Action === 'game_finalised' || lastValidMessage.GameState === 'finished' || lastValidMessage.StatusId === 100;
+      
+      return {
+        homeScore,
+        awayScore,
+        statusId: isFinal ? 3 : 2 // 3 = FINISHED, 2 = LIVE
+      };
+    }
+  } catch (err: any) {
+    console.warn(`[SSE Multiplexer] Error fetching historical scores for ${fixtureId}:`, err.message);
+  }
+
+  return null;
+}
+
 async function fetchTxlineFixtures(apiToken: string): Promise<any[]> {
   try {
     const env = getValidatedEnvironment(apiToken);
@@ -519,13 +583,38 @@ async function fetchTxlineFixtures(apiToken: string): Promise<any[]> {
     
     console.log(`[SSE Multiplexer] Successfully fetched ${fixtures.length} baseline fixtures.`);
     
-    // Clear and populate cache
-    globalFixtureCache.clear();
+    // Populate a local map first to avoid race conditions with clients reading early
+    const tempCache = new Map<string, FixtureState>();
     for (const f of fixtures) {
       const details = parseRawFixtureToState(f);
       if (details.id) {
-        globalFixtureCache.set(details.id, details);
+        tempCache.set(details.id, details);
       }
+    }
+
+    // Dynamic resolution check for past fixtures
+    for (const [id, state] of tempCache.entries()) {
+      if (state.kickoffTime !== undefined && state.kickoffTime <= Date.now()) {
+        console.log(`[SSE Multiplexer] Fixture ${id} kickoff time has passed. Checking TxLINE for latest score...`);
+        try {
+          const latest = await fetchLatestScoreForFixture(id, env.jwt, env.apiToken, env.apiOrigin);
+          if (latest) {
+            state.scores.homeScore = latest.homeScore;
+            state.scores.awayScore = latest.awayScore;
+            state.totalStats = latest.homeScore + latest.awayScore;
+            state.statusId = latest.statusId;
+            console.log(`[SSE Multiplexer] Dynamic score hydration for ${id} successful: ${latest.homeScore}-${latest.awayScore}`);
+          }
+        } catch (err: any) {
+          console.warn(`[SSE Multiplexer] Failed to fetch latest score for past fixture ${id}:`, err.message);
+        }
+      }
+    }
+
+    // Atomically swap to the global cache
+    globalFixtureCache.clear();
+    for (const [id, state] of tempCache.entries()) {
+      globalFixtureCache.set(id, state);
     }
 
     return fixtures;
@@ -570,6 +659,7 @@ export async function GET(req: NextRequest) {
         const payload = JSON.stringify({
           matchId: state.id,
           status: statusStr,
+          statusId: state.statusId,
           homeScore: state.scores.homeScore,
           awayScore: state.scores.awayScore,
           totalStats: state.totalStats,

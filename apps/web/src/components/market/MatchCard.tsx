@@ -158,8 +158,8 @@ export const MatchCard = memo(function MatchCard({ match, market }: MatchCardPro
 
         .match-card:hover {
           transform: translateY(-4px);
-          border-color: rgba(99, 102, 241, 0.3);
-          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05), 0 0 15px rgba(99, 102, 241, 0.05);
+          border-color: rgba(9, 9, 11, 0.2);
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
         }
 
         .card-header {
@@ -179,9 +179,9 @@ export const MatchCard = memo(function MatchCard({ match, market }: MatchCardPro
           font-weight: 700;
           padding: 0.25rem 0.6rem;
           border-radius: 9999px;
-          background: rgba(99, 102, 241, 0.05);
-          border: 1px solid rgba(99, 102, 241, 0.15);
-          color: #4f46e5;
+          background: rgba(9, 9, 11, 0.04);
+          border: 1px solid rgba(9, 9, 11, 0.1);
+          color: #09090b;
           display: flex;
           align-items: center;
           gap: 0.25rem;
@@ -226,9 +226,9 @@ export const MatchCard = memo(function MatchCard({ match, market }: MatchCardPro
         }
 
         .status-badge.upcoming {
-          background: rgba(99, 102, 241, 0.1);
-          color: #4f46e5;
-          border: 1px solid rgba(99, 102, 241, 0.2);
+          background: rgba(9, 9, 11, 0.04);
+          color: #09090b;
+          border: 1px solid rgba(9, 9, 11, 0.1);
         }
 
         .teams-score-row {
@@ -299,8 +299,8 @@ export const MatchCard = memo(function MatchCard({ match, market }: MatchCardPro
         }
 
         .odds-button:hover {
-          background: rgba(99, 102, 241, 0.05);
-          border-color: rgba(99, 102, 241, 0.2);
+          background: rgba(9, 9, 11, 0.04);
+          border-color: rgba(9, 9, 11, 0.1);
         }
 
         .odds-label {
@@ -312,7 +312,7 @@ export const MatchCard = memo(function MatchCard({ match, market }: MatchCardPro
         .odds-value {
           font-size: 0.9rem;
           font-weight: 700;
-          color: #4f46e5;
+          color: #09090b;
         }
 
         .card-footer {
@@ -342,13 +342,13 @@ export const MatchCard = memo(function MatchCard({ match, market }: MatchCardPro
         }
 
         .predict-link {
-          background: rgba(99, 102, 241, 0.08);
-          border: 1px solid rgba(99, 102, 241, 0.2);
-          color: #4f46e5;
+          background: #ffffff;
+          border: 1px solid #e4e4e7;
+          color: #09090b;
           font-size: 0.85rem;
           font-weight: 600;
           padding: 0.5rem;
-          border-radius: 10px;
+          border-radius: 8px;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -395,9 +395,9 @@ export const MatchCard = memo(function MatchCard({ match, market }: MatchCardPro
         }
 
         .predict-link:hover {
-          background: #4f46e5;
+          background: #09090b;
           color: #ffffff;
-          border-color: #4f46e5;
+          border-color: #09090b;
           transform: scale(1.03);
         }
 

@@ -93,8 +93,8 @@ export function WalletConnect() {
         }
 
         .balances-pill {
-          background: rgba(99, 102, 241, 0.08);
-          border: 1px solid rgba(99, 102, 241, 0.15);
+          background: rgba(9, 9, 11, 0.04);
+          border: 1px solid rgba(9, 9, 11, 0.1);
           border-radius: 9999px;
           padding: 0.45rem 1rem;
           display: flex;
@@ -102,12 +102,12 @@ export function WalletConnect() {
           gap: 0.5rem;
           font-size: 0.85rem;
           font-weight: 700;
-          color: #4f46e5;
-          box-shadow: 0 1px 2px rgba(99, 102, 241, 0.05);
+          color: #09090b;
+          box-shadow: 0 1px 2px rgba(9, 9, 11, 0.02);
         }
 
         .divider {
-          color: rgba(99, 102, 241, 0.3);
+          color: rgba(9, 9, 11, 0.2);
           font-weight: 300;
         }
 

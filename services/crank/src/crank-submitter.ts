@@ -84,4 +84,62 @@ export class CrankSubmitter {
       return null;
     }
   }
+
+  public async submitCloseBettingEarly(marketPublicKey: PublicKey): Promise<string | null> {
+    try {
+      console.log(`[Crank Submitter] Closing betting early for market ${marketPublicKey.toBase58()}`);
+      const txSig = await this.program.methods
+        .closeBettingEarly()
+        .accounts({
+          market: marketPublicKey,
+          oracleAuthority: this.authorityKeypair.publicKey,
+        } as any)
+        .signers([this.authorityKeypair])
+        .rpc();
+      console.log(`[Crank Submitter] Betting closed early successfully. Tx Sig: ${txSig}`);
+      return txSig;
+    } catch (err: any) {
+      console.error(`[Crank Submitter] Close early transaction failed: ${err.message}`);
+      return null;
+    }
+  }
+
+  public async submitPropResolution(
+    marketPublicKey: PublicKey,
+    marketAccount: any,
+    resolvedValue: boolean,
+    proofHash: number[]
+  ): Promise<string | null> {
+    try {
+      console.log(`[Crank Submitter] Resolving prop market ${marketPublicKey.toBase58()} | Outcome: ${resolvedValue}`);
+      
+      const vaultAddress = marketAccount.vaultTokenAccount;
+      const vaultTokenInfo = await getAccount(this.connection, vaultAddress);
+      const vaultMint = vaultTokenInfo.mint;
+
+      // Creator fee ATA
+      const creatorTokenAccount = await getAssociatedTokenAddress(
+        vaultMint,
+        marketAccount.creator
+      );
+
+      const txSig = await this.program.methods
+        .resolvePropMarket(resolvedValue, proofHash)
+        .accounts({
+          market: marketPublicKey,
+          oracleAuthority: this.authorityKeypair.publicKey,
+          vaultTokenAccount: vaultAddress,
+          creatorTokenAccount: creatorTokenAccount,
+          crank: this.authorityKeypair.publicKey,
+        } as any)
+        .signers([this.authorityKeypair])
+        .rpc();
+
+      console.log(`[Crank Submitter] Prop market resolved successfully. Tx Sig: ${txSig}`);
+      return txSig;
+    } catch (err: any) {
+      console.error(`[Crank Submitter] Prop resolution transaction failed: ${err.message}`);
+      return null;
+    }
+  }
 }

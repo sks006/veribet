@@ -35,6 +35,7 @@ export function useTxLine() {
             homeTeam: data.homeTeam || getHomeTeam(data.matchId),
             awayTeam: data.awayTeam || getAwayTeam(data.matchId),
             status: data.status,
+            statusId: data.statusId,
             homeScore: data.homeScore,
             awayScore: data.awayScore,
             totalStats: data.totalStats,
@@ -109,5 +110,6 @@ function getAwayTeam(id: string): string {
   if (part === 'FRA') return 'France 🇫🇷';
   if (part === 'GER') return 'Germany 🇩🇪';
   if (part === 'MEX') return 'Mexico 🇲🇽';
+  if (part === 'SWI') return 'Switzerland 🇨🇭';
   return part || 'Away Team';
 }

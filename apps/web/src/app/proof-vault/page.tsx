@@ -168,8 +168,8 @@ export default function ProofVaultPage() {
         }
 
         .search-input:focus {
-          border-color: #6366f1;
-          box-shadow: 0 0 10px rgba(99, 102, 241, 0.1);
+          border-color: #09090b;
+          box-shadow: 0 0 0 2px rgba(9, 9, 11, 0.05);
         }
 
         .proofs-list {
@@ -191,7 +191,7 @@ export default function ProofVaultPage() {
         }
 
         .proof-item-card:hover {
-          border-color: rgba(99, 102, 241, 0.3);
+          border-color: rgba(9, 9, 11, 0.2);
           box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
         }
 
@@ -281,7 +281,7 @@ export default function ProofVaultPage() {
 
         .grid-val.mono {
           font-family: monospace;
-          color: #4f46e5;
+          color: #09090b;
         }
 
         .grid-val.bold {
@@ -305,11 +305,11 @@ export default function ProofVaultPage() {
         }
 
         .audit-link {
-          color: #4f46e5;
+          color: #09090b;
           display: flex;
           align-items: center;
           gap: 0.25rem;
-          text-decoration: none;
+          text-decoration: underline;
           font-weight: 600;
         }
 
@@ -336,9 +336,9 @@ export default function ProofVaultPage() {
           display: inline-block;
           width: 32px;
           height: 32px;
-          border: 3px solid rgba(99, 102, 241, 0.2);
+          border: 3px solid rgba(9, 9, 11, 0.1);
           border-radius: 50%;
-          border-top-color: #6366f1;
+          border-top-color: #09090b;
           animation: spin 1s ease-in-out infinite;
         }
 

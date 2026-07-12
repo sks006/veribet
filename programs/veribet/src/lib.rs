@@ -67,4 +67,54 @@ pub mod veribet {
     pub fn claim_position(ctx: Context<ClaimPosition>) -> Result<()> {
         resolve_market::handle_claim_position(ctx)
     }
+
+    pub fn create_prop_market(
+        ctx: Context<CreatePropMarket>,
+        market_id: [u8; 32],
+        match_id: [u8; 32],
+        event_type: u8,
+        team: u8,
+        comparator: u8,
+        threshold: u16,
+        window: u8,
+        display_title: String,
+        betting_closes_at: i64,
+    ) -> Result<()> {
+        create_prop_market::handle_create_prop_market(
+            ctx,
+            market_id,
+            match_id,
+            event_type,
+            team,
+            comparator,
+            threshold,
+            window,
+            display_title,
+            betting_closes_at,
+        )
+    }
+
+    pub fn close_betting_early(ctx: Context<CloseBettingEarly>) -> Result<()> {
+        create_prop_market::handle_close_betting_early(ctx)
+    }
+
+    pub fn place_prop_bet(
+        ctx: Context<PlacePropBet>,
+        side: bool,
+        amount: u64,
+    ) -> Result<()> {
+        place_prop_bet::handle_place_prop_bet(ctx, side, amount)
+    }
+
+    pub fn resolve_prop_market(
+        ctx: Context<ResolvePropMarket>,
+        resolved_value: bool,
+        proof_hash: [u8; 32],
+    ) -> Result<()> {
+        resolve_prop_market::handle_resolve_prop_market(ctx, resolved_value, proof_hash)
+    }
+
+    pub fn claim_prop_position(ctx: Context<ClaimPropPosition>) -> Result<()> {
+        resolve_prop_market::handle_claim_prop_position(ctx)
+    }
 }

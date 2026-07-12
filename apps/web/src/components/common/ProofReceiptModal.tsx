@@ -73,7 +73,7 @@ export function ProofReceiptModal({
           </div>
 
           <div className="oracle-trust-info">
-            <Cpu size={16} className="text-indigo-400 shrink-0" />
+            <Cpu size={16} className="text-slate-500 shrink-0" />
             <p className="trust-text">
               Outcome verified by TxLINE decentralized crank node. Proof payload is hashed, signed, and validated in on-chain SVM contract instructions.
             </p>
@@ -106,7 +106,7 @@ export function ProofReceiptModal({
           border-radius: 24px;
           width: 100%;
           max-width: 520px;
-          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.08), 0 0 40px rgba(99, 102, 241, 0.02);
+          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.08);
           display: flex;
           flex-direction: column;
           overflow: hidden;
@@ -233,15 +233,15 @@ export function ProofReceiptModal({
 
         .detail-value.mono {
           font-family: monospace;
-          color: #4f46e5;
+          color: #09090b;
         }
 
         .detail-value.link {
-          color: #4f46e5;
+          color: #09090b;
           display: inline-flex;
           align-items: center;
           gap: 0.3rem;
-          text-decoration: none;
+          text-decoration: underline;
           font-weight: 600;
         }
 
@@ -252,8 +252,8 @@ export function ProofReceiptModal({
         .oracle-trust-info {
           display: flex;
           gap: 0.65rem;
-          background: rgba(99, 102, 241, 0.04);
-          border: 1px solid rgba(99, 102, 241, 0.08);
+          background: rgba(9, 9, 11, 0.04);
+          border: 1px solid rgba(9, 9, 11, 0.1);
           padding: 0.85rem;
           border-radius: 12px;
         }

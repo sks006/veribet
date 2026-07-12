@@ -68,6 +68,19 @@ export default function DashboardPage() {
       return;
     }
 
+    const match = matches.find(m => m.id === matchId);
+    if (!match) {
+      alert('Match details not found.');
+      return;
+    }
+
+    const kickoffTimestamp = Math.floor(match.kickoffTime / 1000);
+    const nowSecs = Math.floor(Date.now() / 1000);
+    if (kickoffTimestamp <= nowSecs) {
+      alert('Cannot initialize a prediction market for a match that has already kicked off.');
+      return;
+    }
+
     setCreatingMarket(matchId);
     try {
       const marketId = Math.floor(Math.random() * 10000000);
@@ -82,11 +95,10 @@ export default function DashboardPage() {
 
       const sequence = 1;
       const targetValue = 2; // e.g. target 2 goals/points
-      const kickoffTimestamp = Math.floor(Date.now() / 1000) + 300;
       const emergencyUnlockTimestamp = kickoffTimestamp + 7200;
       const marketType = 0; // 0 = Over/Under, 1 = Yes/No
 
-      console.log(`Initializing market PDA: ${marketPda.toBase58()}`);
+      console.log(`Initializing market PDA: ${marketPda.toBase58()} with kickoff time ${new Date(kickoffTimestamp * 1000).toISOString()}`);
 
       const txSig = await program.methods
         .createMarket(
@@ -263,8 +275,8 @@ export default function DashboardPage() {
         }
 
         .search-input:focus {
-          border-color: #6366f1;
-          box-shadow: 0 0 10px rgba(99, 102, 241, 0.1);
+          border-color: #09090b;
+          box-shadow: 0 0 0 2px rgba(9, 9, 11, 0.05);
         }
 
         .dashboard-grid {
@@ -303,8 +315,8 @@ export default function DashboardPage() {
 
         .initialize-market-overlay {
           margin-top: 0.75rem;
-          background: rgba(99, 102, 241, 0.02);
-          border: 1px dashed rgba(99, 102, 241, 0.2);
+          background: rgba(9, 9, 11, 0.02);
+          border: 1px dashed rgba(9, 9, 11, 0.15);
           border-radius: 12px;
           padding: 1rem;
           display: flex;
@@ -320,13 +332,13 @@ export default function DashboardPage() {
         }
 
         .initialize-pool-btn {
-          background: #4f46e5;
-          border: none;
+          background: #09090b;
+          border: 1px solid #09090b;
           color: #ffffff;
           font-size: 0.8rem;
           font-weight: 700;
           padding: 0.5rem 1rem;
-          border-radius: 8px;
+          border-radius: 6px;
           cursor: pointer;
           transition: all 0.2s ease;
           display: flex;
@@ -346,7 +358,8 @@ export default function DashboardPage() {
         }
 
         .initialize-pool-btn:hover:not(:disabled) {
-          background: #4338ca;
+          background: #18181b;
+          border-color: #18181b;
           transform: translateY(-1px);
         }
 
@@ -375,9 +388,9 @@ export default function DashboardPage() {
           display: inline-block;
           width: 32px;
           height: 32px;
-          border: 3px solid rgba(99, 102, 241, 0.2);
+          border: 3px solid rgba(9, 9, 11, 0.1);
           border-radius: 50%;
-          border-top-color: #6366f1;
+          border-top-color: #09090b;
           animation: spin 1s ease-in-out infinite;
         }
 

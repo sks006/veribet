@@ -6,6 +6,7 @@ export interface Match {
   homeTeam: string;
   awayTeam: string;
   status: 'LIVE' | 'FINISHED' | 'SCHEDULED';
+  statusId?: number;
   homeScore: number;
   awayScore: number;
   totalStats: number;

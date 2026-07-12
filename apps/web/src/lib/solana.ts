@@ -203,3 +203,207 @@ export async function placePositionWithDelegation(
     throw err;
   }
 }
+
+export async function createPropMarket(
+  connection: Connection,
+  program: any,
+  creatorWallet: PublicKey,
+  matchIdStr: string,
+  eventType: number,
+  team: number,
+  comparator: number,
+  threshold: number,
+  window: number,
+  displayTitle: string,
+  bettingClosesAtSecs: number,
+  walletSignTransaction: (tx: Transaction) => Promise<Transaction>
+): Promise<string> {
+  const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
+
+  // 1. Generate unique random 32-byte market ID
+  const marketIdBytes = crypto.getRandomValues(new Uint8Array(32));
+
+  // 2. Derive PDA for the market
+  const [marketAddress] = PublicKey.findProgramAddressSync(
+    [Buffer.from('prop_market'), marketIdBytes],
+    PROGRAM_ID
+  );
+
+  // 3. Derive PDA for the vault
+  const [vaultAddress] = PublicKey.findProgramAddressSync(
+    [Buffer.from('prop_vault'), marketAddress.toBuffer()],
+    PROGRAM_ID
+  );
+
+  const matchIdBytes = Buffer.alloc(32);
+  Buffer.from(matchIdStr).copy(matchIdBytes);
+
+  const createInstruction = await program.methods
+    .createPropMarket(
+      Array.from(marketIdBytes),
+      Array.from(matchIdBytes),
+      eventType,
+      team,
+      comparator,
+      threshold,
+      window,
+      displayTitle,
+      new anchor.BN(bettingClosesAtSecs)
+    )
+    .accounts({
+      market: marketAddress,
+      creator: creatorWallet,
+      vaultTokenAccount: vaultAddress,
+      vaultMint: WSOL_MINT,
+      oracleAuthority: creatorWallet,
+    } as any)
+    .instruction();
+
+  const tx = new Transaction();
+  tx.add(createInstruction);
+
+  const latestBlockhash = await connection.getLatestBlockhash();
+  tx.recentBlockhash = latestBlockhash.blockhash;
+  tx.feePayer = creatorWallet;
+
+  const signedTx = await walletSignTransaction(tx);
+  const txSig = await connection.sendRawTransaction(signedTx.serialize());
+  await connection.confirmTransaction(txSig, 'confirmed');
+
+  return txSig;
+}
+
+export async function placePropBet(
+  connection: Connection,
+  program: any,
+  bettorWallet: PublicKey,
+  marketAddress: PublicKey,
+  side: boolean,
+  amountInSol: number,
+  walletSignTransaction: (tx: Transaction) => Promise<Transaction>
+): Promise<string> {
+  const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
+
+  const [positionAddress] = PublicKey.findProgramAddressSync(
+    [Buffer.from('prop_position'), marketAddress.toBuffer(), bettorWallet.toBuffer()],
+    PROGRAM_ID
+  );
+
+  const [vaultAddress] = PublicKey.findProgramAddressSync(
+    [Buffer.from('prop_vault'), marketAddress.toBuffer()],
+    PROGRAM_ID
+  );
+
+  const userTokenAccount = await getAssociatedTokenAddress(WSOL_MINT, bettorWallet);
+  const amountLamports = amountInSol * 1e9;
+
+  const tx = new Transaction();
+
+  // Create user's WSOL ATA if it doesn't exist
+  const ataInfo = await connection.getAccountInfo(userTokenAccount);
+  if (!ataInfo) {
+    tx.add(
+      createAssociatedTokenAccountInstruction(
+        bettorWallet,
+        userTokenAccount,
+        bettorWallet,
+        WSOL_MINT
+      )
+    );
+  }
+
+  // Wrap SOL (amount + 0.005 SOL for the rebate contribution)
+  const wrapAmount = amountLamports;
+  tx.add(
+    SystemProgram.transfer({
+      fromPubkey: bettorWallet,
+      toPubkey: userTokenAccount,
+      lamports: wrapAmount,
+    })
+  );
+  tx.add(createSyncNativeInstruction(userTokenAccount));
+
+  const betInstruction = await program.methods
+    .placePropBet(side, new anchor.BN(amountLamports))
+    .accounts({
+      market: marketAddress,
+      userPosition: positionAddress,
+      bettor: bettorWallet,
+      userTokenAccount: userTokenAccount,
+      vaultTokenAccount: vaultAddress,
+    } as any)
+    .instruction();
+
+  tx.add(betInstruction);
+
+  const latestBlockhash = await connection.getLatestBlockhash();
+  tx.recentBlockhash = latestBlockhash.blockhash;
+  tx.feePayer = bettorWallet;
+
+  const signedTx = await walletSignTransaction(tx);
+  const txSig = await connection.sendRawTransaction(signedTx.serialize());
+  await connection.confirmTransaction(txSig, 'confirmed');
+
+  return txSig;
+}
+
+export async function claimPropPayout(
+  connection: Connection,
+  program: any,
+  bettorWallet: PublicKey,
+  marketAddress: PublicKey,
+  walletSignTransaction: (tx: Transaction) => Promise<Transaction>
+): Promise<string> {
+  const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
+
+  const [positionAddress] = PublicKey.findProgramAddressSync(
+    [Buffer.from('prop_position'), marketAddress.toBuffer(), bettorWallet.toBuffer()],
+    PROGRAM_ID
+  );
+
+  const [vaultAddress] = PublicKey.findProgramAddressSync(
+    [Buffer.from('prop_vault'), marketAddress.toBuffer()],
+    PROGRAM_ID
+  );
+
+  const userTokenAccount = await getAssociatedTokenAddress(WSOL_MINT, bettorWallet);
+
+  const tx = new Transaction();
+
+  // Create user's WSOL ATA if it doesn't exist
+  const ataInfo = await connection.getAccountInfo(userTokenAccount);
+  if (!ataInfo) {
+    tx.add(
+      createAssociatedTokenAccountInstruction(
+        bettorWallet,
+        userTokenAccount,
+        bettorWallet,
+        WSOL_MINT
+      )
+    );
+  }
+
+  const claimInstruction = await program.methods
+    .claimPropPosition()
+    .accounts({
+      market: marketAddress,
+      userPosition: positionAddress,
+      bettor: bettorWallet,
+      vaultTokenAccount: vaultAddress,
+      userTokenAccount: userTokenAccount,
+    } as any)
+    .instruction();
+
+  tx.add(claimInstruction);
+
+  const latestBlockhash = await connection.getLatestBlockhash();
+  tx.recentBlockhash = latestBlockhash.blockhash;
+  tx.feePayer = bettorWallet;
+
+  const signedTx = await walletSignTransaction(tx);
+  const txSig = await connection.sendRawTransaction(signedTx.serialize());
+  await connection.confirmTransaction(txSig, 'confirmed');
+
+  return txSig;
+}
+

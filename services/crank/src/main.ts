@@ -90,6 +90,43 @@ async function main() {
     headers['x-api-key'] = process.env.TXLINE_ACTIVATED_TOKEN || apiToken;
   }
 
+  // Stats cache for prop markets tracking
+  interface PropStats {
+    fouls: [number, number];
+    redCards: [number, number];
+    yellowCards: [number, number];
+    corners: [number, number];
+    freeKicks: [number, number];
+    matchMinute: number;
+  }
+
+  const matchStatsCache: Record<string, PropStats> = {};
+
+  const getStatValue = (stats: PropStats, eventType: number, team: number): number => {
+    const teamIdx = team === 1 ? 1 : 0;
+    switch (eventType) {
+      case 0: return stats.fouls[teamIdx];
+      case 1: return stats.redCards[teamIdx];
+      case 2: return stats.yellowCards[teamIdx];
+      case 3: return stats.corners[teamIdx];
+      case 4: return stats.freeKicks[teamIdx];
+      default: return 0;
+    }
+  };
+
+  const evaluatePropResolution = (marketAccount: any, stats: PropStats): boolean => {
+    const value = getStatValue(stats, marketAccount.eventType, marketAccount.team);
+    // comparator: 0=CountGte, 1=CountLte, 2=Occurs
+    if (marketAccount.comparator === 0) {
+      return value >= marketAccount.threshold;
+    } else if (marketAccount.comparator === 1) {
+      return value <= marketAccount.threshold;
+    } else if (marketAccount.comparator === 2) {
+      return value > 0;
+    }
+    return false;
+  };
+
   // Set up SSE client
   const sseClient = new SseClient(TXLINE_URL, headers);
 
@@ -98,30 +135,127 @@ async function main() {
       const event: TxLineEvent = JSON.parse(data);
       console.log(`[Crank Main] Received match event: ${event.matchId} | Status: ${event.status}`);
 
+      // 1. Maintain running stats counter
+      if (!matchStatsCache[event.matchId]) {
+        matchStatsCache[event.matchId] = {
+          fouls: [0, 0],
+          redCards: [0, 0],
+          yellowCards: [0, 0],
+          corners: [0, 0],
+          freeKicks: [0, 0],
+          matchMinute: 0
+        };
+      }
+
+      const stats = matchStatsCache[event.matchId];
+
+      if (event.matchMinute !== undefined) {
+        stats.matchMinute = event.matchMinute;
+      } else {
+        if (event.status === 'LIVE') {
+          stats.matchMinute = Math.min(90, stats.matchMinute + 1);
+        } else if (event.status === 'FINISHED') {
+          stats.matchMinute = 90;
+        }
+      }
+
+      if (event.eventType && event.team !== undefined) {
+        const teamIdx = event.team === 1 ? 1 : 0;
+        if (event.eventType === 'foul') stats.fouls[teamIdx]++;
+        else if (event.eventType === 'red_card') stats.redCards[teamIdx]++;
+        else if (event.eventType === 'yellow_card') stats.yellowCards[teamIdx]++;
+        else if (event.eventType === 'corner') stats.corners[teamIdx]++;
+        else if (event.eventType === 'free_kick') stats.freeKicks[teamIdx]++;
+      } else {
+        // Fallback simulated metrics when receiving generic updates
+        const currentTotal = stats.corners[0] + stats.corners[1] + stats.fouls[0] + stats.fouls[1];
+        if (event.totalStats > currentTotal) {
+          const diff = event.totalStats - currentTotal;
+          for (let i = 0; i < diff; i++) {
+            const team = (currentTotal + i) % 2 === 0 ? 0 : 1;
+            const isCorner = (currentTotal + i) % 3 === 0;
+            if (isCorner) {
+              stats.corners[team]++;
+            } else {
+              stats.fouls[team]++;
+            }
+          }
+        }
+      }
+
+      // 2. Fetch and check Binary Prop Markets
+      try {
+        const allPropMarkets = await program.account.binaryPropMarket.all();
+        const propMatched = allPropMarkets.filter((m: any) => {
+          const mIdStr = Buffer.from(m.account.matchId)
+            .toString('utf8')
+            .replace(/\0/g, '');
+          return mIdStr === event.matchId;
+        });
+
+        for (const m of propMatched) {
+          // Check early close gating
+          if (m.account.bettable && !m.account.resolved) {
+            let shouldClose = false;
+            const currentMinute = stats.matchMinute;
+            
+            if (m.account.window === 0 && currentMinute >= 35) {
+              shouldClose = true;
+            } else if (m.account.window === 1 && currentMinute >= 80) {
+              shouldClose = true;
+            } else if (m.account.window === 2 && currentMinute >= 0 && event.status !== 'SCHEDULED') {
+              shouldClose = true;
+            }
+
+            if (shouldClose) {
+              console.log(`[Crank Main] Early close triggered for market ${m.publicKey.toBase58()} (Minute ${currentMinute})`);
+              try {
+                await submitter.submitCloseBettingEarly(m.publicKey);
+              } catch (err: any) {
+                console.error(`[Crank Main] Failed to close betting early for ${m.publicKey.toBase58()}: ${err.message}`);
+              }
+            }
+          }
+
+          // Check resolution gating
+          if (event.status === 'FINISHED' && !m.account.resolved) {
+            const resolvedValue = evaluatePropResolution(m.account, stats);
+            const proofHash = Array.from(ProofHandler.generateProofHash(event));
+            console.log(`[Crank Main] Resolving prop market ${m.publicKey.toBase58()} to ${resolvedValue}`);
+            try {
+              await submitter.submitPropResolution(m.publicKey, m.account, resolvedValue, proofHash);
+            } catch (err: any) {
+              console.error(`[Crank Main] Failed to resolve prop market ${m.publicKey.toBase58()}: ${err.message}`);
+            }
+          }
+        }
+      } catch (err: any) {
+        console.error(`[Crank Main] Error processing binary prop markets: ${err.message}`);
+      }
+
+      // 3. Process normal parametric markets
       if (event.status !== 'FINISHED') {
-        console.log(`[Crank Main] Match ${event.matchId} is ${event.status}. Skipping resolution...`);
         return;
       }
 
-      // Verify cryptographic signature
+      // Verify cryptographic signature for normal market resolution
       const isValid = ProofHandler.verifyProof(event, ORACLE_PUBLIC_KEY);
       if (!isValid) {
-        console.warn(`[Crank Main] Invalid signature for event ${event.matchId}. Dropping event.`);
+        console.warn(`[Crank Main] Invalid signature for event ${event.matchId}. Skipping normal resolution.`);
         return;
       }
 
-      console.log(`[Crank Main] Proof verified for finished match ${event.matchId}. Scanning on-chain markets...`);
+      console.log(`[Crank Main] Proof verified for finished match ${event.matchId}. Scanning standard parametric markets...`);
 
-      // Scan all markets on-chain for the match ID
       const allMarkets = await program.account.parametricMarket.all();
       const matched = allMarkets.filter((market: any) => {
         const matchIdStr = Buffer.from(market.account.matchIdBytes)
           .toString('utf8')
-          .replace(/\0/g, ''); // strip trailing null bytes
+          .replace(/\0/g, '');
         return matchIdStr === event.matchId && !market.account.isResolved;
       });
 
-      console.log(`[Crank Main] Found ${matched.length} unresolved matching markets for ${event.matchId}`);
+      console.log(`[Crank Main] Found ${matched.length} unresolved standard markets for ${event.matchId}`);
 
       for (const market of matched) {
         const marketIdNum = market.account.marketId.toNumber();

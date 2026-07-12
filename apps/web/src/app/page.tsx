@@ -10,7 +10,7 @@ export default function LandingPage() {
       <div className="hero-section">
         <div className="hero-glow"></div>
         <div className="hero-badge">
-          <Sparkles size={12} className="text-indigo-400" />
+          <Sparkles size={12} className="text-slate-600" />
           <span>Next-Generation Solana Betting Protocol</span>
         </div>
         <h1 className="hero-title">
@@ -87,19 +87,19 @@ export default function LandingPage() {
           top: -150px;
           width: 500px;
           height: 300px;
-          background: radial-gradient(circle, rgba(99, 102, 241, 0.08) 0%, rgba(99, 102, 241, 0) 70%);
+          background: radial-gradient(circle, rgba(9, 9, 11, 0.03) 0%, rgba(9, 9, 11, 0) 70%);
           z-index: -1;
           pointer-events: none;
         }
 
         .hero-badge {
-          background: rgba(99, 102, 241, 0.05);
-          border: 1px solid rgba(99, 102, 241, 0.15);
+          background: #f4f4f5;
+          border: 1px solid #e4e4e7;
           border-radius: 9999px;
           padding: 0.35rem 0.85rem;
           font-size: 0.8rem;
           font-weight: 600;
-          color: #4f46e5;
+          color: #09090b;
           display: flex;
           align-items: center;
           gap: 0.4rem;
@@ -114,7 +114,7 @@ export default function LandingPage() {
         }
 
         .hero-title-gradient {
-          background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%);
+          background: linear-gradient(135deg, #09090b 0%, #475569 100%);
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
         }
@@ -133,21 +133,21 @@ export default function LandingPage() {
         }
 
         .primary-btn {
-          background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-          border: none;
+          background: #09090b;
+          border: 1px solid #09090b;
           color: #ffffff;
           font-size: 0.95rem;
           font-weight: 700;
           padding: 0.95rem 1.8rem;
-          border-radius: 12px;
+          border-radius: 8px;
           text-decoration: none;
           transition: all 0.2s ease;
-          box-shadow: 0 4px 15px rgba(79, 70, 229, 0.3);
         }
 
         .primary-btn:hover {
+          background: #18181b;
+          border-color: #18181b;
           transform: translateY(-2px);
-          box-shadow: 0 6px 20px rgba(79, 70, 229, 0.4);
         }
 
         .secondary-btn {
@@ -196,23 +196,23 @@ export default function LandingPage() {
         }
 
         .feature-card:hover {
-          border-color: rgba(99, 102, 241, 0.3);
+          border-color: rgba(9, 9, 11, 0.2);
           box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
         }
 
         .feature-icon-wrapper {
-          background: rgba(99, 102, 241, 0.05);
-          border: 1px solid rgba(99, 102, 241, 0.15);
+          background: rgba(9, 9, 11, 0.04);
+          border: 1px solid rgba(9, 9, 11, 0.1);
           width: 48px;
           height: 48px;
-          border-radius: 12px;
+          border-radius: 8px;
           display: flex;
           align-items: center;
           justify-content: center;
         }
 
         .feature-icon {
-          color: #4f46e5;
+          color: #09090b;
         }
 
         .feature-name {

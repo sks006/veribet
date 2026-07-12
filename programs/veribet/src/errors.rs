@@ -43,4 +43,16 @@ pub enum VeriBetError {
 
     #[msg("Cannot place position with zero collateral.")]
     ZeroCollateral,
+
+    #[msg("The prop prediction window for this market has closed.")]
+    MarketClosed,
+
+    #[msg("The threshold provided for the prop event is invalid.")]
+    InvalidThreshold,
+
+    #[msg("The time window provided for the match is invalid.")]
+    InvalidWindow,
+
+    #[msg("You cannot change sides on an existing position; you must bet on the same side.")]
+    CannotChangeBetSide,
 }

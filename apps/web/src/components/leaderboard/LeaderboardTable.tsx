@@ -66,7 +66,7 @@ export function LeaderboardTable() {
                 <td className="align-center rank-cell">{getRankIcon(entry.rank)}</td>
                 <td className="wallet-cell">{entry.wallet}</td>
                 <td>{getTierBadge(entry.tier)}</td>
-                <td className="align-right bold text-indigo-600">{entry.points} pts</td>
+                <td className="align-right bold points-val">{entry.points} pts</td>
                 <td className="align-right text-emerald-600 bold">{entry.winRate}%</td>
                 <td className="align-right text-orange-600 bold">
                   {entry.streak > 0 ? `${entry.streak} W` : '-'}
@@ -175,8 +175,12 @@ export function LeaderboardTable() {
 
         .wallet-cell {
           font-family: monospace;
-          color: #4f46e5;
+          color: #0f172a;
           font-weight: 600;
+        }
+
+        .points-val {
+          color: #09090b;
         }
 
         .tier-badge {

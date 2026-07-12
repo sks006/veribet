@@ -419,19 +419,19 @@ export default function SetupPage() {
         }
 
         .step-indicator.active .step-num {
-          border-color: #4f46e5;
-          color: #4f46e5;
-          box-shadow: 0 0 10px rgba(79, 70, 229, 0.15);
+          border-color: #09090b;
+          color: #09090b;
+          box-shadow: 0 0 10px rgba(9, 9, 11, 0.05);
         }
 
         .step-indicator.completed .step-num {
-          background: #4f46e5;
-          border-color: #4f46e5;
+          background: #09090b;
+          border-color: #09090b;
           color: #ffffff;
         }
 
         .step-indicator.active .step-name {
-          color: #4f46e5;
+          color: #09090b;
         }
 
         .setup-card {
@@ -492,27 +492,27 @@ export default function SetupPage() {
         }
 
         .step-icon {
-          color: #4f46e5;
+          color: #09090b;
         }
 
         .wizard-btn {
-          background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-          border: none;
+          background: #09090b;
+          border: 1px solid #09090b;
           color: #ffffff;
           font-weight: 700;
           padding: 0.85rem 2rem;
-          border-radius: 12px;
+          border-radius: 8px;
           cursor: pointer;
           transition: all 0.2s ease;
           display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
         }
 
-        .wizard-btn:hover {
+        .wizard-btn:hover:not(:disabled) {
+          background: #18181b;
+          border-color: #18181b;
           transform: translateY(-1px);
-          box-shadow: 0 6px 16px rgba(79, 70, 229, 0.3);
         }
 
         .wizard-btn:disabled {
@@ -559,13 +559,13 @@ export default function SetupPage() {
         }
 
         .tier-card:hover {
-          border-color: rgba(99, 102, 241, 0.3);
+          border-color: rgba(9, 9, 11, 0.2);
           background: #ffffff;
         }
 
         .tier-card.selected {
-          border-color: #4f46e5;
-          background: rgba(99, 102, 241, 0.02);
+          border-color: #09090b;
+          background: rgba(9, 9, 11, 0.02);
         }
 
         .tier-details {

@@ -67,6 +67,19 @@ export default function UpcomingPage() {
       return;
     }
 
+    const match = matches.find(m => m.id === matchId);
+    if (!match) {
+      alert('Match details not found.');
+      return;
+    }
+
+    const kickoffTimestamp = Math.floor(match.kickoffTime / 1000);
+    const nowSecs = Math.floor(Date.now() / 1000);
+    if (kickoffTimestamp <= nowSecs) {
+      alert('Cannot initialize a prediction market for a match that has already kicked off.');
+      return;
+    }
+
     setCreatingMarket(matchId);
     try {
       const marketId = Math.floor(Math.random() * 10000000);
@@ -81,7 +94,6 @@ export default function UpcomingPage() {
 
       const sequence = 1;
       const targetValue = 2; // target value
-      const kickoffTimestamp = Math.floor(Date.now() / 1000) + 300;
       const emergencyUnlockTimestamp = kickoffTimestamp + 7200;
       const marketType = 0; // Over/Under
 
@@ -339,8 +351,8 @@ export default function UpcomingPage() {
         }
 
         .search-input:focus {
-          border-color: #4f46e5;
-          box-shadow: 0 4px 20px rgba(79, 70, 229, 0.05);
+          border-color: #09090b;
+          box-shadow: 0 0 0 2px rgba(9, 9, 11, 0.05);
         }
 
         .schedule-layout {
@@ -387,8 +399,8 @@ export default function UpcomingPage() {
         }
 
         .club-icon {
-          background: rgba(79, 70, 229, 0.1);
-          color: #4f46e5;
+          background: rgba(15, 23, 42, 0.05);
+          color: #475569;
         }
 
         .fixtures-list {
@@ -424,8 +436,8 @@ export default function UpcomingPage() {
         }
 
         .fixture-card-wrapper:hover {
-          border-color: rgba(99, 102, 241, 0.25);
-          box-shadow: 0 10px 30px rgba(99, 102, 241, 0.05);
+          border-color: rgba(9, 9, 11, 0.2);
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
         }
 
         .init-market-overlay {
@@ -445,21 +457,21 @@ export default function UpcomingPage() {
         }
 
         .init-pool-btn {
-          background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-          border: none;
+          background: #09090b;
+          border: 1px solid #09090b;
           color: #ffffff;
           font-weight: 700;
           font-size: 0.8rem;
           padding: 0.5rem 1.2rem;
-          border-radius: 8px;
+          border-radius: 6px;
           cursor: pointer;
           transition: all 0.2s ease;
-          box-shadow: 0 4px 10px rgba(79, 70, 229, 0.15);
         }
 
         .init-pool-btn:hover {
+          background: #18181b;
+          border-color: #18181b;
           transform: translateY(-1px);
-          box-shadow: 0 6px 14px rgba(79, 70, 229, 0.25);
         }
 
         .init-pool-btn:disabled {
@@ -491,8 +503,8 @@ export default function UpcomingPage() {
         .spinner {
           width: 32px;
           height: 32px;
-          border: 3px solid rgba(79, 70, 229, 0.15);
-          border-top-color: #4f46e5;
+          border: 3px solid rgba(9, 9, 11, 0.1);
+          border-top-color: #09090b;
           border-radius: 50%;
           animation: spin 1s linear infinite;
         }
