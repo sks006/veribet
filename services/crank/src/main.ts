@@ -1,4 +1,3 @@
-import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Keypair } from '@solana/web3.js';
@@ -7,15 +6,13 @@ import { ProofHandler } from './proof-handler';
 import { CrankSubmitter } from './crank-submitter';
 import { TxLineEvent } from './types';
 import * as anchor from '@coral-xyz/anchor';
-import idlJson from '../../../target/idl/veribet.json';
+import idlJson from '../../../apps/web/src/types/veribet.json';
+import { config } from './config';
 
-// Load env
-dotenv.config();
-
-const RPC_URL = process.env.RPC_URL || 'https://api.devnet.solana.com';
-const PROGRAM_ID = process.env.PROGRAM_ID || '2Syq46YQQ4iGbCouFYxjeHEcABScMd669NAK5XrxZFWG';
+const RPC_URL = config.rpcUrl;
+const PROGRAM_ID = config.programId;
 const AUTHORITY_KEY_PATH = process.env.AUTHORITY_KEY_PATH || './authority-keypair.json';
-const txlineBase = process.env.TXLINE_API_ORIGIN || 'https://txline-dev.txodds.com';
+const txlineBase = config.txlineApiOrigin;
 const TXLINE_URL = process.env.TXLINE_URL || `${txlineBase}/api/scores/stream`;
 const ORACLE_PUBLIC_KEY = process.env.ORACLE_PUBLIC_KEY || 'mock';
 

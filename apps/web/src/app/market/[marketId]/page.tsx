@@ -221,7 +221,7 @@ export default function MarketDetailPage({ params }: PageProps) {
 
   useEffect(() => {
     fetchBets();
-    const interval = setInterval(fetchBets, 3000);
+    const interval = setInterval(fetchBets, 8000);
     return () => clearInterval(interval);
   }, [marketIdStr]);
 

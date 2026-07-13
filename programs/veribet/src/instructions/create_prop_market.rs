@@ -5,10 +5,12 @@ use crate::errors::VeriBetError;
 
 #[derive(Accounts)]
 #[instruction(
-    match_id: [u8; 32],
-    event_type: u8,
-    team: u8,
-    threshold: u16,
+    market_id: [u8; 32], // 1. Mapped first
+    match_id: [u8; 32],  // 2. Mapped second
+    event_type: u8,      // 3. Mapped third
+    team: u8,            // 4. Mapped fourth
+    comparator: u8,      // 5. Mapped fifth (must be included because threshold is 6th)
+    threshold: u16,      // 6. Mapped sixth (last variable needed for seeds)
 )]
 pub struct CreatePropMarket<'info> {
     #[account(
@@ -17,7 +19,7 @@ pub struct CreatePropMarket<'info> {
         space = BinaryPropMarket::LEN,
         seeds = [
             b"prop_market",
-            match_id.as_ref(),
+            match_id.as_ref(),     // ✅ Now correctly reads the 2nd 32-byte argument
             &[event_type],
             &[team],
             &threshold.to_le_bytes()
@@ -64,16 +66,22 @@ pub struct CloseBettingEarly<'info> {
 
 pub fn handle_create_prop_market(
     ctx: Context<CreatePropMarket>,
-    market_id: [u8; 32],
-    match_id: [u8; 32],
-    event_type: u8,
-    team: u8,
-    comparator: u8,
-    threshold: u16,
-    window: u8,
-    display_title: String,
-    betting_closes_at: i64,
+    market_id: [u8; 32], // Arg #1
+    match_id: [u8; 32],  // Arg #2
+    event_type: u8,      // Arg #3
+    team: u8,            // Arg #4
+    comparator: u8,      // Arg #5
+    threshold: u16,      // Arg #6
+    window: u8,          // Arg #7 (not used in seeds)
+    display_title: String, // Arg #8
+    betting_closes_at: i64, // Arg #9
 ) -> Result<()> {
+    msg!("=== RUST DERIVATION SEEDS ===");
+    msg!("match_id: {:?}", match_id);
+    msg!("event_type: {}", event_type);
+    msg!("team: {}", team);
+    msg!("threshold bytes: {:?}", threshold.to_le_bytes());
+
     // Basic validation
     if threshold == 0 {
         return err!(VeriBetError::InvalidThreshold);

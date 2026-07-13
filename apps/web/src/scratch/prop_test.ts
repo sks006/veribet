@@ -3,37 +3,13 @@ import { Connection, Keypair, PublicKey, SystemProgram, Transaction } from '@sol
 import { getAssociatedTokenAddress, createAssociatedTokenAccountInstruction, createSyncNativeInstruction } from '@solana/spl-token';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 
 const PROGRAM_ID = new PublicKey('2Syq46YQQ4iGbCouFYxjeHEcABScMd669NAK5XrxZFWG');
 const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
 
-// PDAs helper
-function getMarketPda(marketId: number): PublicKey {
-  const [marketAddress] = PublicKey.findProgramAddressSync(
-    [Buffer.from('market'), new anchor.BN(marketId).toArrayLike(Buffer, 'le', 8)],
-    PROGRAM_ID
-  );
-  return marketAddress;
-}
-
-function getUserPositionPda(marketAddress: PublicKey, userWallet: PublicKey): PublicKey {
-  const [positionAddress] = PublicKey.findProgramAddressSync(
-    [Buffer.from('position'), marketAddress.toBuffer(), userWallet.toBuffer()],
-    PROGRAM_ID
-  );
-  return positionAddress;
-}
-
-function getVaultPda(marketAddress: PublicKey): PublicKey {
-  const [vaultAddress] = PublicKey.findProgramAddressSync(
-    [Buffer.from('vault'), marketAddress.toBuffer()],
-    PROGRAM_ID
-  );
-  return vaultAddress;
-}
-
 async function run() {
-  console.log("=== DEVNET ENVIRONMENT RESET & PLACE POSITION ===");
+  console.log("=== DEVNET PROP MARKET RESET & PLACE BET TEST ===");
 
   // Load IDL
   const idlPath = path.resolve(process.cwd(), 'apps/web/src/types/veribet.json');
@@ -61,11 +37,10 @@ async function run() {
   const now = Date.now();
   const futureFixture = snapshot.find((f: any) => f.Competition === "World Cup" && f.StartTime > now);
   if (!futureFixture) {
-    throw new Error("No future World Cup fixture found in the snapshot!");
+    throw new Error("No future World Cup fixture found!");
   }
   console.log(`[TxLINE] Selected future fixture: ${futureFixture.Participant1} vs ${futureFixture.Participant2}`);
   console.log(`         Fixture ID: ${futureFixture.FixtureId}`);
-  console.log(`         Start Time: ${new Date(futureFixture.StartTime).toISOString()} (in ${Math.round((futureFixture.StartTime - now) / 1000 / 60)} minutes)`);
 
   // 4. Initialize Solana Devnet connection and Authority Wallet
   const connection = new Connection("https://api.devnet.solana.com", "confirmed");
@@ -78,46 +53,77 @@ async function run() {
   const program = new anchor.Program(idlJson as any, provider) as any;
 
   // 5. Generate random market ID and derive PDAs
-  const marketId = Math.floor(Math.random() * 10000000);
-  const marketPda = getMarketPda(marketId);
-  const vaultPda = getVaultPda(marketPda);
-  console.log(`[Solana] Derived Market PDA: ${marketPda.toBase58()}`);
-  console.log(`[Solana] Derived Vault PDA: ${vaultPda.toBase58()}`);
-
-  // Match ID bytes (16 bytes)
-  const matchIdBytes = Buffer.alloc(16);
+  const marketIdBytes = crypto.randomBytes(32);
+  const matchIdBytes = Buffer.alloc(32);
   Buffer.from(String(futureFixture.FixtureId)).copy(matchIdBytes);
 
-  const kickoffTimestamp = Math.floor(futureFixture.StartTime / 1000);
-  const emergencyUnlockTimestamp = kickoffTimestamp + 7200;
+  const eventType = 1; // Red Cards
+  const team = 1;      // Team B / Away
+  const comparator = 0; // CountGte
+  const threshold = 2; // threshold of 2
+  const window = 1;     // Window 1
+  const displayTitle = "Red Cards (Away) >= 2";
+  const bettingClosesAtSecs = Math.floor(futureFixture.StartTime / 1000);
 
-  // 6. Execute create_market
-  console.log("[Solana] Sending create_market transaction...");
+  const thresholdBuffer = Buffer.alloc(2);
+  thresholdBuffer.writeUInt16LE(threshold);
+
+  const [marketAddress] = PublicKey.findProgramAddressSync(
+    [
+      Buffer.from('prop_market'),
+      matchIdBytes,
+      Buffer.from([eventType]),
+      Buffer.from([team]),
+      thresholdBuffer
+    ],
+    PROGRAM_ID
+  );
+
+  const [vaultAddress] = PublicKey.findProgramAddressSync(
+    [Buffer.from('vault'), marketAddress.toBuffer()],
+    PROGRAM_ID
+  );
+
+  console.log(`[Solana] Derived Prop Market PDA: ${marketAddress.toBase58()}`);
+  console.log(`[Solana] Derived Vault PDA: ${vaultAddress.toBase58()}`);
+
+  console.log("=== TS DERIVATION SEEDS ===");
+  console.log("matchIdBytes:", Array.from(matchIdBytes));
+  console.log("eventType:", eventType);
+  console.log("team:", team);
+  console.log("thresholdBuffer:", Array.from(thresholdBuffer));
+
+  // 6. Execute create_prop_market
+  console.log("[Solana] Sending create_prop_market transaction...");
   const createTx = await program.methods
-    .createMarket(
-      new anchor.BN(marketId),
-      new anchor.BN(1), // sequence
+    .createPropMarket(
+      Array.from(marketIdBytes),
       Array.from(matchIdBytes),
-      2, // targetValue (e.g. 2 goals)
-      new anchor.BN(kickoffTimestamp),
-      new anchor.BN(emergencyUnlockTimestamp),
-      0 // Over/Under
+      eventType,
+      team,
+      comparator,
+      threshold,
+      window,
+      displayTitle,
+      new anchor.BN(bettingClosesAtSecs)
     )
     .accounts({
-      market: marketPda,
+      market: marketAddress,
+      creator: authorityKeypair.publicKey,
+      vaultTokenAccount: vaultAddress,
       vaultMint: WSOL_MINT,
-      vaultTokenAccount: vaultPda,
-      authority: authorityKeypair.publicKey,
+      oracleAuthority: authorityKeypair.publicKey,
+      systemProgram: SystemProgram.programId,
     })
     .rpc();
   
-  console.log(`[Solana] Market created! Signature: ${createTx}`);
+  console.log(`[Solana] Prop Market created! Signature: ${createTx}`);
 
   // Wait for confirmation
   console.log("[Solana] Waiting for market creation transaction confirmation...");
   await connection.confirmTransaction(createTx, "confirmed");
 
-  // 7. Generate a new temporary user keypair to place a position
+  // 7. Generate a new temporary user keypair to place a bet
   const userKeypair = Keypair.generate();
   console.log(`[Solana] Generated temporary user pubkey: ${userKeypair.publicKey.toBase58()}`);
 
@@ -138,37 +144,27 @@ async function run() {
   console.log(`[Solana] Funding tx signature: ${fundSig}`);
   await connection.confirmTransaction(fundSig, "confirmed");
 
-  // 8. Place position
-  const positionAddress = getUserPositionPda(marketPda, userKeypair.publicKey);
-  const userTokenAccount = await getAssociatedTokenAddress(WSOL_MINT, userKeypair.publicKey);
-  const collateralAmount = 50_000_000; // 0.05 SOL
+  // 8. Place prop bet
+  const [positionAddress] = PublicKey.findProgramAddressSync(
+    [Buffer.from('prop_position'), marketAddress.toBuffer(), userKeypair.publicKey.toBuffer()],
+    PROGRAM_ID
+  );
 
-  const placeIx = await program.methods
-    .initializePosition(
-      0, // predictionVector (Home / Over)
-      new anchor.BN(collateralAmount),
-      1, // tierLevel
-      12345 // referenceNonce
-    )
+  const userTokenAccount = await getAssociatedTokenAddress(WSOL_MINT, userKeypair.publicKey);
+  const amountLamports = 50_000_000; // 0.05 SOL
+
+  const betInstruction = await program.methods
+    .placePropBet(true, new anchor.BN(amountLamports))
     .accounts({
-      market: marketPda,
+      market: marketAddress,
       userPosition: positionAddress,
-      user: userKeypair.publicKey,
-      vaultTokenAccount: vaultPda,
+      bettor: userKeypair.publicKey,
       userTokenAccount: userTokenAccount,
-      delegatedAuthority: authorityKeypair.publicKey,
+      vaultTokenAccount: vaultAddress,
     })
     .instruction();
 
-  // Mark delegatedAuthority as signer (as intercepted by the frontend)
-  for (const keyMeta of placeIx.keys) {
-    if (keyMeta.pubkey.equals(authorityKeypair.publicKey)) {
-      keyMeta.isSigner = true;
-    }
-  }
-
   const tx = new Transaction();
-  // Add WSOL ATA creation
   tx.add(
     createAssociatedTokenAccountInstruction(
       userKeypair.publicKey,
@@ -178,48 +174,43 @@ async function run() {
     )
   );
 
-  // Transfer and Sync Native (WSOL wrap)
   tx.add(
     SystemProgram.transfer({
       fromPubkey: userKeypair.publicKey,
       toPubkey: userTokenAccount,
-      lamports: collateralAmount,
+      lamports: amountLamports,
     })
   );
   tx.add(createSyncNativeInstruction(userTokenAccount));
 
-  // Add the place_position instruction
-  tx.add(placeIx);
+  tx.add(betInstruction);
 
   tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
   tx.feePayer = userKeypair.publicKey;
 
-  // Sign with both userKeypair and authorityKeypair
-  tx.sign(userKeypair, authorityKeypair);
+  tx.sign(userKeypair);
 
-  console.log("[Solana] Sending place_position transaction...");
+  console.log("[Solana] Sending place_prop_bet transaction...");
   try {
     const placeSig = await connection.sendRawTransaction(tx.serialize(), {
       skipPreflight: false,
       preflightCommitment: 'confirmed'
     });
-    console.log(`[Solana] Place Position transaction successful! Signature: ${placeSig}`);
+    console.log(`[Solana] Place Prop Bet transaction successful! Signature: ${placeSig}`);
     
     console.log("[Solana] Waiting for position transaction confirmation...");
     await connection.confirmTransaction(placeSig, "confirmed");
     
     // Fetch and check position state
-    const userPosAccount = await program.account.userPosition.fetch(positionAddress);
-    console.log("[Solana] Successfully fetched UserPosition state from on-chain:");
-    console.log(`         User Wallet: ${userPosAccount.userWallet.toBase58()}`);
-    console.log(`         Market PDA: ${userPosAccount.marketAddress.toBase58()}`);
-    console.log(`         Collateral: ${userPosAccount.collateralAmount.toNumber() / 1e9} SOL`);
-    console.log(`         Prediction Vector: ${userPosAccount.predictionVector}`);
-    console.log(`         Tier Level: ${userPosAccount.tierLevel}`);
-    console.log(`         Reference Nonce: ${userPosAccount.referenceNonce}`);
-    console.log("=== DEVNET ENVIRONMENT RESET & PLACE POSITION COMPLETE ===");
+    const propPosAccount = await program.account.propPosition.fetch(positionAddress);
+    console.log("[Solana] Successfully fetched PropPosition state from on-chain:");
+    console.log(`         Bettor: ${propPosAccount.bettor.toBase58()}`);
+    console.log(`         Market PDA: ${propPosAccount.market.toBase58()}`);
+    console.log(`         Amount: ${propPosAccount.amount.toNumber() / 1e9} SOL`);
+    console.log(`         Side: ${propPosAccount.side}`);
+    console.log("=== DEVNET PROP MARKET RESET & PLACE BET TEST COMPLETE ===");
   } catch (err: any) {
-    console.error("[Solana] place_position failed:", err);
+    console.error("[Solana] place_prop_bet failed:", err);
     if (err.logs) {
       console.error("[Solana] Transaction logs:", err.logs);
     }

@@ -55,4 +55,7 @@ pub enum VeriBetError {
 
     #[msg("You cannot change sides on an existing position; you must bet on the same side.")]
     CannotChangeBetSide,
+
+    #[msg("The prediction vector provided does not match your existing position.")]
+    VectorMismatch,
 }

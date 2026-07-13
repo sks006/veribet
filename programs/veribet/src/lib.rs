@@ -40,14 +40,30 @@ pub mod veribet {
         )
     }
 
-    pub fn place_position(
-        ctx: Context<PlacePosition>,
+    pub fn initialize_position(
+        ctx: Context<InitializePosition>,
         prediction_vector: u8,
         collateral_amount: u64,
         tier_level: u8,
         reference_nonce: u32,
     ) -> Result<()> {
-        place_position::handle_place_position(
+        place_position::handle_initialize_position(
+            ctx,
+            prediction_vector,
+            collateral_amount,
+            tier_level,
+            reference_nonce,
+        )
+    }
+
+    pub fn increase_position_collateral(
+        ctx: Context<IncreasePositionCollateral>,
+        prediction_vector: u8,
+        collateral_amount: u64,
+        tier_level: u8,
+        reference_nonce: u32,
+    ) -> Result<()> {
+        place_position::handle_increase_position_collateral(
             ctx,
             prediction_vector,
             collateral_amount,

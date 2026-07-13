@@ -6,7 +6,9 @@ import {
   createSyncNativeInstruction 
 } from '@solana/spl-token';
 
-export const PROGRAM_ID = new PublicKey('2Syq46YQQ4iGbCouFYxjeHEcABScMd669NAK5XrxZFWG');
+import { config } from './config';
+
+export const PROGRAM_ID = new PublicKey(config.programId);
 
 export function getMarketPda(marketId: number): PublicKey {
   const [marketAddress] = PublicKey.findProgramAddressSync(
@@ -75,23 +77,44 @@ export async function placePositionWithDelegation(
 
   const userTokenAccount = await getAssociatedTokenAddress(vaultMint, userWallet);
 
-  // 4. Build instruction
-  const placePositionInstruction = await program.methods
-    .placePosition(
-      predictionVector,
-      new anchor.BN(collateralAmount),
-      tierLevel,
-      referenceNonce
-    )
-    .accounts({
-      market: marketAddress,
-      userPosition: positionAddress,
-      user: userWallet,
-      vaultTokenAccount: market.vaultTokenAccount,
-      userTokenAccount: userTokenAccount,
-      delegatedAuthority: delegatedAuthority,
-    } as any)
-    .instruction();
+  // 3.5 Check if the user position account already exists on-chain
+  const positionAccountInfo = await connection.getAccountInfo(positionAddress);
+  const exists = positionAccountInfo !== null;
+
+  // 4. Build instruction dynamically based on existence
+  const placePositionInstruction = exists
+    ? await program.methods
+        .increasePositionCollateral(
+          predictionVector,
+          new anchor.BN(collateralAmount),
+          tierLevel,
+          referenceNonce
+        )
+        .accounts({
+          market: marketAddress,
+          userPosition: positionAddress,
+          user: userWallet,
+          vaultTokenAccount: market.vaultTokenAccount,
+          userTokenAccount: userTokenAccount,
+          delegatedAuthority: delegatedAuthority,
+        } as any)
+        .instruction()
+    : await program.methods
+        .initializePosition(
+          predictionVector,
+          new anchor.BN(collateralAmount),
+          tierLevel,
+          referenceNonce
+        )
+        .accounts({
+          market: marketAddress,
+          userPosition: positionAddress,
+          user: userWallet,
+          vaultTokenAccount: market.vaultTokenAccount,
+          userTokenAccount: userTokenAccount,
+          delegatedAuthority: delegatedAuthority,
+        } as any)
+        .instruction();
 
   // 5. Build and serialize Transaction
   const tx = new Transaction();
@@ -204,6 +227,54 @@ export async function placePositionWithDelegation(
   }
 }
 
+/**
+ * Helper to send a transaction, confirm it, and catch simulation errors,
+ * extracting logs using getLogs() if it is a SendTransactionError.
+ */
+async function sendAndConfirmRawTx(
+  connection: Connection,
+  signedTx: Transaction
+): Promise<string> {
+  try {
+    const txSig = await connection.sendRawTransaction(signedTx.serialize(), {
+      skipPreflight: false,
+      preflightCommitment: 'confirmed'
+    });
+    await connection.confirmTransaction(txSig, 'confirmed');
+    return txSig;
+  } catch (err: any) {
+    console.error('[Client] sendRawTransaction failed:', err);
+    let logs: string[] = [];
+    if (err instanceof SendTransactionError) {
+      try {
+        const possibleLogs = (err as any).logs || await (err as any).getLogs(connection);
+        if (Array.isArray(possibleLogs)) {
+          logs = possibleLogs;
+        }
+      } catch (logErr) {
+        console.error('Failed to retrieve logs from SendTransactionError:', logErr);
+      }
+    } else if (err.logs && Array.isArray(err.logs)) {
+      logs = err.logs;
+    } else if (typeof err.getLogs === 'function') {
+      try {
+        const possibleLogs = err.getLogs();
+        if (Array.isArray(possibleLogs)) {
+          logs = possibleLogs;
+        }
+      } catch (logErr) {
+        console.error('Failed to call getLogs():', logErr);
+      }
+    }
+
+    if (logs.length > 0) {
+      console.error('[Client] Transaction logs:', logs);
+      throw new Error(`Simulation failed. Message: ${err.message}. Logs: ${JSON.stringify(logs)}`);
+    }
+    throw err;
+  }
+}
+
 export async function createPropMarket(
   connection: Connection,
   program: any,
@@ -223,20 +294,35 @@ export async function createPropMarket(
   // 1. Generate unique random 32-byte market ID
   const marketIdBytes = crypto.getRandomValues(new Uint8Array(32));
 
-  // 2. Derive PDA for the market
-  const [marketAddress] = PublicKey.findProgramAddressSync(
-    [Buffer.from('prop_market'), marketIdBytes],
-    PROGRAM_ID
-  );
-
-  // 3. Derive PDA for the vault
-  const [vaultAddress] = PublicKey.findProgramAddressSync(
-    [Buffer.from('prop_vault'), marketAddress.toBuffer()],
-    PROGRAM_ID
-  );
-
   const matchIdBytes = Buffer.alloc(32);
   Buffer.from(matchIdStr).copy(matchIdBytes);
+
+  // 2. Derive PDA for the market (seeds matching the Anchor program)
+  const thresholdBuffer = Buffer.alloc(2);
+  thresholdBuffer.writeUInt16LE(threshold);
+
+  const [marketAddress] = PublicKey.findProgramAddressSync(
+    [
+      Buffer.from('prop_market'),
+      matchIdBytes,
+      Buffer.from([eventType]),
+      Buffer.from([team]),
+      thresholdBuffer
+    ],
+    PROGRAM_ID
+  );
+
+  // 3. Derive PDA for the vault (seeds matching: b"vault", market_key)
+  const [vaultAddress] = PublicKey.findProgramAddressSync(
+    [Buffer.from('vault'), marketAddress.toBuffer()],
+    PROGRAM_ID
+  );
+
+  console.log("=== TS DERIVATION SEEDS ===");
+  console.log("matchIdBytes:", Array.from(matchIdBytes));
+  console.log("eventType:", eventType);
+  console.log("team:", team);
+  console.log("thresholdBuffer:", Array.from(thresholdBuffer));
 
   const createInstruction = await program.methods
     .createPropMarket(
@@ -267,10 +353,7 @@ export async function createPropMarket(
   tx.feePayer = creatorWallet;
 
   const signedTx = await walletSignTransaction(tx);
-  const txSig = await connection.sendRawTransaction(signedTx.serialize());
-  await connection.confirmTransaction(txSig, 'confirmed');
-
-  return txSig;
+  return await sendAndConfirmRawTx(connection, signedTx);
 }
 
 export async function placePropBet(
@@ -290,7 +373,7 @@ export async function placePropBet(
   );
 
   const [vaultAddress] = PublicKey.findProgramAddressSync(
-    [Buffer.from('prop_vault'), marketAddress.toBuffer()],
+    [Buffer.from('vault'), marketAddress.toBuffer()],
     PROGRAM_ID
   );
 
@@ -341,10 +424,7 @@ export async function placePropBet(
   tx.feePayer = bettorWallet;
 
   const signedTx = await walletSignTransaction(tx);
-  const txSig = await connection.sendRawTransaction(signedTx.serialize());
-  await connection.confirmTransaction(txSig, 'confirmed');
-
-  return txSig;
+  return await sendAndConfirmRawTx(connection, signedTx);
 }
 
 export async function claimPropPayout(
@@ -362,7 +442,7 @@ export async function claimPropPayout(
   );
 
   const [vaultAddress] = PublicKey.findProgramAddressSync(
-    [Buffer.from('prop_vault'), marketAddress.toBuffer()],
+    [Buffer.from('vault'), marketAddress.toBuffer()],
     PROGRAM_ID
   );
 
@@ -401,9 +481,7 @@ export async function claimPropPayout(
   tx.feePayer = bettorWallet;
 
   const signedTx = await walletSignTransaction(tx);
-  const txSig = await connection.sendRawTransaction(signedTx.serialize());
-  await connection.confirmTransaction(txSig, 'confirmed');
-
-  return txSig;
+  return await sendAndConfirmRawTx(connection, signedTx);
 }
+
 

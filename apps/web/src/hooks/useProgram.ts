@@ -2,9 +2,11 @@ import { useMemo } from 'react';
 import { Connection, PublicKey } from '@solana/web3.js';
 import * as anchor from '@coral-xyz/anchor';
 import { useAnchorWallet, useConnection } from '@solana/wallet-adapter-react';
-import idlJson from '../../../../target/idl/veribet.json';
+import idlJson from '../types/veribet.json';
 
-const PROGRAM_ID = new PublicKey('2Syq46YQQ4iGbCouFYxjeHEcABScMd669NAK5XrxZFWG');
+import { config } from '../lib/config';
+
+const PROGRAM_ID = new PublicKey(config.programId);
 
 export function useProgram() {
   const { connection } = useConnection();

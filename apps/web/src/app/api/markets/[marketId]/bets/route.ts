@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Connection, PublicKey } from '@solana/web3.js';
 import * as anchor from '@coral-xyz/anchor';
-import idlJson from '../../../../../../../../target/idl/veribet.json';
+import idlJson from '../../../../../types/veribet.json';
 
-const PROGRAM_ID = new PublicKey('2Syq46YQQ4iGbCouFYxjeHEcABScMd669NAK5XrxZFWG');
+import { config } from '../../../../../lib/config';
+
+const PROGRAM_ID = new PublicKey(config.programId);
+
+// In-memory cache to prevent Solana RPC rate-limiting (429)
+interface CacheEntry {
+  data: any;
+  timestamp: number;
+}
+const betsCache: Record<string, CacheEntry> = {};
+const CACHE_TTL_MS = 6000; // 6 seconds
 
 export async function GET(
   req: NextRequest,
@@ -16,7 +26,13 @@ export async function GET(
       return NextResponse.json({ error: 'Missing marketId' }, { status: 400 });
     }
 
-    const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'http://127.0.0.1:8899';
+    // 1. Check cache first
+    const cached = betsCache[marketIdStr];
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      return NextResponse.json(cached.data);
+    }
+
+    const rpcUrl = config.rpcUrl;
     const connection = new Connection(rpcUrl, 'confirmed');
 
     const dummyWallet = {
@@ -29,15 +45,18 @@ export async function GET(
     });
     const program = new anchor.Program(idlJson as any, provider) as any;
 
-    // 1. Fetch standard markets and match
-    const allMarkets = await program.account.parametricMarket.all();
+    // 2. Fetch base lists in parallel
+    const [allMarkets, allPropMarkets, allPropPositions] = await Promise.all([
+      program.account.parametricMarket.all(),
+      program.account.binaryPropMarket.all(),
+      program.account.propPosition.all()
+    ]);
+
     const matchedMarket = allMarkets.find((m: any) => {
       const mIdStr = Buffer.from(m.account.matchIdBytes).toString('utf8').replace(/\0/g, '');
       return mIdStr === marketIdStr;
     });
 
-    // 2. Fetch prop markets and match
-    const allPropMarkets = await program.account.binaryPropMarket.all();
     const matchedProps = allPropMarkets.filter((m: any) => {
       const mIdStr = Buffer.from(m.account.matchId).toString('utf8').replace(/\0/g, '');
       return mIdStr === marketIdStr;
@@ -74,14 +93,11 @@ export async function GET(
     
     for (const pm of matchedProps) {
       try {
-        const positions = await program.account.propPosition.all([
-          {
-            memcmp: {
-              offset: 8,
-              bytes: pm.publicKey.toBase58(),
-            }
-          }
-        ]);
+        const pmKeyStr = pm.publicKey.toBase58();
+        // Filter the fetched prop positions in memory
+        const positions = allPropPositions.filter(
+          (p: any) => p.account.market.toBase58() === pmKeyStr
+        );
         
         const eventName = eventTypes[pm.account.eventType] || "Event";
         const comp = comparators[pm.account.comparator] || "";
@@ -98,13 +114,20 @@ export async function GET(
           timestamp: p.account.placedAt.toNumber() * 1000,
         })));
       } catch (err) {
-        console.error(`Error fetching prop positions for ${pm.publicKey.toBase58()}:`, err);
+        console.error(`Error filtering prop positions for ${pm.publicKey.toBase58()}:`, err);
       }
     }
 
     const combined = [...standardBets, ...propBets].sort((a, b) => b.timestamp - a.timestamp);
+    const responseData = { bets: combined };
 
-    return NextResponse.json({ bets: combined });
+    // Save to cache
+    betsCache[marketIdStr] = {
+      data: responseData,
+      timestamp: Date.now()
+    };
+
+    return NextResponse.json(responseData);
   } catch (err: any) {
     console.error('Error in Recent Bets API route:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });

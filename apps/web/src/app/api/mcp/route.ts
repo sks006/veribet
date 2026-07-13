@@ -3,14 +3,16 @@ import { Connection, PublicKey, Keypair, Transaction, SystemProgram } from '@sol
 import * as anchor from '@coral-xyz/anchor';
 import * as fs from 'fs';
 import * as path from 'path';
-import idlJson from '../../../../../../target/idl/veribet.json';
+import idlJson from '../../../types/veribet.json';
 import { 
   createAssociatedTokenAccountInstruction, 
   getAssociatedTokenAddress, 
   createSyncNativeInstruction 
 } from '@solana/spl-token';
 
-const PROGRAM_ID = new PublicKey('2Syq46YQQ4iGbCouFYxjeHEcABScMd669NAK5XrxZFWG');
+import { config } from '../../../lib/config';
+
+const PROGRAM_ID = new PublicKey(config.programId);
 const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
 
 let cachedAuthorityKeypair: Keypair | null = null;
@@ -127,7 +129,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { action } = body;
 
-    const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'http://127.0.0.1:8899';
+    const rpcUrl = config.rpcUrl;
     const connection = new Connection(rpcUrl, 'confirmed');
 
     const authorityKeypair = getDelegatedAuthorityKeypair();
@@ -154,20 +156,35 @@ export async function POST(req: NextRequest) {
       }
 
       const marketIdBytes = crypto.getRandomValues(new Uint8Array(32));
-      const [marketAddress] = PublicKey.findProgramAddressSync(
-        [Buffer.from('prop_market'), marketIdBytes],
-        PROGRAM_ID
-      );
-      const [vaultAddress] = PublicKey.findProgramAddressSync(
-        [Buffer.from('prop_vault'), marketAddress.toBuffer()],
-        PROGRAM_ID
-      );
-
       const matchIdBytes = Buffer.alloc(32);
       Buffer.from(matchId).copy(matchIdBytes);
 
+      const thresholdBuffer = Buffer.alloc(2);
+      thresholdBuffer.writeUInt16LE(threshold || 0);
+
+      const [marketAddress] = PublicKey.findProgramAddressSync(
+        [
+          Buffer.from('prop_market'),
+          matchIdBytes,
+          Buffer.from([eventType || 0]),
+          Buffer.from([team || 0]),
+          thresholdBuffer
+        ],
+        PROGRAM_ID
+      );
+      const [vaultAddress] = PublicKey.findProgramAddressSync(
+        [Buffer.from('vault'), marketAddress.toBuffer()],
+        PROGRAM_ID
+      );
+
       const display = displayTitle || `Prop: Event ${eventType} Team ${team}`;
       const bettingClosesAt = Math.floor(Date.now() / 1000) + 3600; // 1 hour default
+
+      console.log("=== TS DERIVATION SEEDS ===");
+      console.log("matchIdBytes:", Array.from(matchIdBytes));
+      console.log("eventType:", eventType || 0);
+      console.log("team:", team || 0);
+      console.log("thresholdBuffer:", Array.from(thresholdBuffer));
 
       const txSig = await program.methods
         .createPropMarket(
@@ -210,7 +227,7 @@ export async function POST(req: NextRequest) {
         PROGRAM_ID
       );
       const [vaultAddress] = PublicKey.findProgramAddressSync(
-        [Buffer.from('prop_vault'), marketPubKey.toBuffer()],
+        [Buffer.from('vault'), marketPubKey.toBuffer()],
         PROGRAM_ID
       );
 
