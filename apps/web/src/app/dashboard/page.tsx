@@ -16,6 +16,7 @@ export default function DashboardPage() {
   const { program } = useProgram();
   const { publicKey } = useWallet();
   const [onChainMarkets, setOnChainMarkets] = useState<any[]>([]);
+  const [propMarkets, setPropMarkets] = useState<any[]>([]);
   const [loadingMarkets, setLoadingMarkets] = useState(true);
   const [inputValue, setInputValue] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -28,8 +29,12 @@ export default function DashboardPage() {
     }
     try {
       setLoadingMarkets(true);
-      const accounts = await program.account.parametricMarket.all();
+      const [accounts, propAccounts] = await Promise.all([
+        program.account.parametricMarket.all(),
+        program.account.binaryPropMarket.all(),
+      ]);
       setOnChainMarkets(accounts);
+      setPropMarkets(propAccounts);
     } catch (e) {
       console.error('Failed to load on-chain markets:', e);
     } finally {
@@ -143,6 +148,19 @@ export default function DashboardPage() {
     });
   }, [matches, searchTerm]);
 
+  // Filter prop markets dynamically
+  const filteredMarkets = React.useMemo(() => {
+    return propMarkets.filter((market) => {
+      const matchIdStr = Buffer.from(market.account.matchId)
+        .toString('utf8')
+        .replace(/\0/g, '');
+      return (
+        matchIdStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        market.account.displayTitle.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+    });
+  }, [propMarkets, searchTerm]);
+
   return (
     <div className="dashboard-page">
       <div className="dashboard-header-row">
@@ -206,6 +224,42 @@ export default function DashboardPage() {
                   </div>
                 );
               })}
+            </div>
+          )}
+
+          {/* Prop Markets Section */}
+          {filteredMarkets.length > 0 && (
+            <div className="prop-markets-section">
+              <h2 className="section-title">Binary Prop Markets</h2>
+              <div className="prop-cards-grid">
+                {filteredMarkets.map((market) => {
+                  const eventTypes = ["Fouls", "Red Cards", "Yellow Cards", "Corners", "Free Kicks"];
+                  const eventName = eventTypes[market.account.eventType] || "Event";
+                  return (
+                    <div key={market.publicKey.toBase58()} className="prop-market-card">
+                      {/* Header */}
+                      <div className="market-header">
+                        <span className="event-title">{market.account.displayTitle || eventName}</span>
+                        <span className={`status-badge ${market.account.bettable ? 'active' : 'closed'}`}>
+                          {market.account.bettable ? 'BETTABLE' : 'CLOSED'}
+                        </span>
+                      </div>
+
+                      {/* Pool Data */}
+                      <div className="pool-data">
+                        <div className="pool-row">
+                          <span className='text-green-500'>YES Pool</span>
+                          <span className="pool-value">{(market.account.poolYes.toNumber() / 1e9).toFixed(3)} SOL</span>
+                        </div>
+                        <div className="pool-row">
+                          <span className='text-red-500'>NO Pool</span>
+                          <span className="pool-value">{(market.account.poolNo.toNumber() / 1e9).toFixed(3)} SOL</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
@@ -407,7 +461,97 @@ export default function DashboardPage() {
         @keyframes spin {
           to { transform: rotate(360deg); }
         }
+
+        .prop-markets-section {
+          margin-top: 2rem;
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+        }
+
+        .section-title {
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: #0f172a;
+          margin: 0;
+        }
+
+        .prop-cards-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+          gap: 1.25rem;
+        }
+
+        .prop-market-card {
+          background: #ffffff;
+          border: 1px solid rgba(15, 23, 42, 0.08);
+          border-radius: 16px;
+          padding: 1.25rem;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.01);
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+          transition: all 0.2s ease;
+        }
+
+        .prop-market-card:hover {
+          border-color: rgba(15, 23, 42, 0.15);
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+          transform: translateY(-2px);
+        }
+
+        .market-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .event-title {
+          font-size: 0.95rem;
+          font-weight: 700;
+          color: #0f172a;
+        }
+
+        .status-badge {
+          font-size: 0.65rem;
+          font-weight: 700;
+          padding: 0.2rem 0.5rem;
+          border-radius: 6px;
+        }
+
+        .status-badge.active {
+          background: rgba(16, 185, 129, 0.1);
+          color: #059669;
+        }
+
+        .status-badge.closed {
+          background: rgba(148, 163, 184, 0.1);
+          color: #64748b;
+        }
+
+        .pool-data {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+          background: rgba(15, 23, 42, 0.02);
+          border-radius: 10px;
+          padding: 0.75rem;
+        }
+
+        .pool-row {
+          display: flex;
+          justify-content: space-between;
+          font-size: 0.8rem;
+          color: #64748b;
+          font-weight: 500;
+        }
+
+        .pool-value {
+          font-weight: 700;
+          color: #0f172a;
+        }
       `}</style>
     </div>
   );
 }
+
