@@ -18,9 +18,18 @@ const WSOL_MINT = new PublicKey('So11111111111111111111111111111111111111112');
 let cachedAuthorityKeypair: Keypair | null = null;
 
 function getDelegatedAuthorityKeypair(): Keypair {
-  if (cachedAuthorityKeypair) {
-    return cachedAuthorityKeypair;
+  if (cachedAuthorityKeypair) return cachedAuthorityKeypair;
+
+  if (process.env.AUTHORITY_KEY) {
+    try {
+      const secret = Uint8Array.from(JSON.parse(process.env.AUTHORITY_KEY));
+      cachedAuthorityKeypair = Keypair.fromSecretKey(secret);
+      return cachedAuthorityKeypair;
+    } catch (e) {
+      console.warn("Failed to parse AUTHORITY_KEY env variable:", e);
+    }
   }
+
   let resolvedPath = '';
   const envPath = process.env.AUTHORITY_KEY_PATH;
   if (envPath) {
