@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useTxLine } from '../../hooks/useTxLine';
 import { useProgram } from '../../hooks/useProgram';
 import { MatchCard } from '../../components/market/MatchCard';
@@ -235,28 +236,37 @@ export default function DashboardPage() {
                 {filteredMarkets.map((market) => {
                   const eventTypes = ["Fouls", "Red Cards", "Yellow Cards", "Corners", "Free Kicks"];
                   const eventName = eventTypes[market.account.eventType] || "Event";
+                  const matchIdStr = Buffer.from(market.account.matchId)
+                    .toString('utf8')
+                    .replace(/\0/g, '');
                   return (
-                    <div key={market.publicKey.toBase58()} className="prop-market-card">
-                      {/* Header */}
-                      <div className="market-header">
-                        <span className="event-title">{market.account.displayTitle || eventName}</span>
-                        <span className={`status-badge ${market.account.bettable ? 'active' : 'closed'}`}>
-                          {market.account.bettable ? 'BETTABLE' : 'CLOSED'}
-                        </span>
-                      </div>
+                    <Link 
+                      key={market.publicKey.toBase58()} 
+                      href={`/market/${matchIdStr}`}
+                      className="prop-market-card-link"
+                    >
+                      <div className="prop-market-card">
+                        {/* Header */}
+                        <div className="market-header">
+                          <span className="event-title">{market.account.displayTitle || eventName}</span>
+                          <span className={`status-badge ${market.account.bettable ? 'active' : 'closed'}`}>
+                            {market.account.bettable ? 'BETTABLE' : 'CLOSED'}
+                          </span>
+                        </div>
 
-                      {/* Pool Data */}
-                      <div className="pool-data">
-                        <div className="pool-row">
-                          <span className='text-green-500'>YES Pool</span>
-                          <span className="pool-value">{(market.account.poolYes.toNumber() / 1e9).toFixed(3)} SOL</span>
-                        </div>
-                        <div className="pool-row">
-                          <span className='text-red-500'>NO Pool</span>
-                          <span className="pool-value">{(market.account.poolNo.toNumber() / 1e9).toFixed(3)} SOL</span>
+                        {/* Pool Data */}
+                        <div className="pool-data">
+                          <div className="pool-row">
+                            <span className='text-green-500'>YES Pool</span>
+                            <span className="pool-value">{(market.account.poolYes.toNumber() / 1e9).toFixed(3)} SOL</span>
+                          </div>
+                          <div className="pool-row">
+                            <span className='text-red-500'>NO Pool</span>
+                            <span className="pool-value">{(market.account.poolNo.toNumber() / 1e9).toFixed(3)} SOL</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    </Link>
                   );
                 })}
               </div>
@@ -480,6 +490,12 @@ export default function DashboardPage() {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
           gap: 1.25rem;
+        }
+
+        .prop-market-card-link {
+          text-decoration: none;
+          display: block;
+          color: inherit;
         }
 
         .prop-market-card {

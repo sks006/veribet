@@ -484,4 +484,46 @@ export async function claimPropPayout(
   return await sendAndConfirmRawTx(connection, signedTx);
 }
 
+/**
+ * Searches the signatures of a market PDA to find the transaction that executed the resolution instruction.
+ */
+export async function getResolutionTxSig(
+  connection: Connection,
+  marketAddress: PublicKey,
+  isProp: boolean
+): Promise<string | null> {
+  try {
+    const signatures = await connection.getSignaturesForAddress(marketAddress, { limit: 20 });
+    
+    for (const sigInfo of signatures) {
+      const tx = await connection.getParsedTransaction(sigInfo.signature, {
+        maxSupportedTransactionVersion: 0,
+        commitment: 'confirmed'
+      });
+      if (!tx || !tx.meta || !tx.meta.logMessages) continue;
+      
+      const logs = tx.meta.logMessages.join('\n');
+      const targetInstruction = isProp ? 'ResolvePropMarket' : 'ResolveMarket';
+      
+      if (logs.includes(targetInstruction)) {
+        return sigInfo.signature;
+      }
+    }
+  } catch (err) {
+    console.error('Error fetching resolution tx signature:', err);
+  }
+  return null;
+}
 
+/**
+ * Returns a Solana Explorer URL based on the transaction signature and the target RPC/network.
+ */
+export function getExplorerUrl(txSig: string, rpcUrl: string): string {
+  if (rpcUrl.includes('localhost') || rpcUrl.includes('127.0.0.1') || rpcUrl.includes('8899')) {
+    return `https://explorer.solana.com/tx/${txSig}?cluster=custom&customUrl=${encodeURIComponent('http://localhost:8899')}`;
+  }
+  if (rpcUrl.includes('mainnet')) {
+    return `https://explorer.solana.com/tx/${txSig}`;
+  }
+  return `https://explorer.solana.com/tx/${txSig}?cluster=devnet`;
+}

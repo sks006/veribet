@@ -6,7 +6,8 @@ import * as anchor from '@coral-xyz/anchor';
 import { useProgram } from '../../../hooks/useProgram';
 import { useTxLine } from '../../../hooks/useTxLine';
 import { useAccountSubscription } from '../../../hooks/useAccountSubscription';
-import { getMarketPda, getUserPositionPda, getVaultPda, createPropMarket, placePropBet, claimPropPayout } from '../../../lib/solana';
+import { getMarketPda, getUserPositionPda, getVaultPda, createPropMarket, placePropBet, claimPropPayout, getResolutionTxSig, getExplorerUrl } from '../../../lib/solana';
+import { config } from '../../../lib/config';
 import { PredictionForm } from '../../../components/market/PredictionForm';
 import { ProofReceiptModal } from '../../../components/common/ProofReceiptModal';
 import { RecentBetsFeed } from '../../../components/market/RecentBetsFeed';
@@ -14,7 +15,7 @@ import { TopPredictors } from '../../../components/market/TopPredictors';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey } from '@solana/web3.js';
 import { getAssociatedTokenAddress } from '@solana/spl-token';
-import { ShieldCheck, Info, User, DollarSign, Calendar, TrendingUp } from 'lucide-react';
+import { ShieldCheck, Info, User, DollarSign, Calendar, TrendingUp, ExternalLink } from 'lucide-react';
 
 interface PageProps {
   params: Promise<{ marketId: string }>;
@@ -38,6 +39,8 @@ export default function MarketDetailPage({ params }: PageProps) {
   const [userPosition, setUserPosition] = useState<any | null>(null);
   const [claiming, setClaiming] = useState(false);
   const [showProofModal, setShowProofModal] = useState(false);
+  const [resolutionTxSig, setResolutionTxSig] = useState<string | null>(null);
+  const [propResolutionSigs, setPropResolutionSigs] = useState<Record<string, string>>({});
 
   // Prop Markets State
   const [propMarkets, setPropMarkets] = useState<any[]>([]);
@@ -146,6 +149,22 @@ export default function MarketDetailPage({ params }: PageProps) {
     program
   );
 
+  useEffect(() => {
+    if (marketState?.isResolved && marketPda && connection) {
+      const fetchResolutionTx = async () => {
+        try {
+          const sig = await getResolutionTxSig(connection, marketPda, false);
+          if (sig) {
+            setResolutionTxSig(sig);
+          }
+        } catch (e) {
+          console.error('[MarketDetailPage] Error fetching resolution tx signature:', e);
+        }
+      };
+      fetchResolutionTx();
+    }
+  }, [marketState?.isResolved, marketPda, connection]);
+
   // Load user position account
   const fetchUserPosition = async () => {
     if (!program || !userPositionPda) return;
@@ -201,6 +220,35 @@ export default function MarketDetailPage({ params }: PageProps) {
   useEffect(() => {
     fetchPropMarkets();
   }, [program, marketIdStr, publicKey]);
+
+  useEffect(() => {
+    if (!connection || propMarkets.length === 0) return;
+    const fetchPropResolutionSigs = async () => {
+      const newSigs: Record<string, string> = { ...propResolutionSigs };
+      let changed = false;
+
+      for (const m of propMarkets) {
+        const keyStr = m.publicKey.toBase58();
+        if (m.account.resolved && !newSigs[keyStr]) {
+          try {
+            const sig = await getResolutionTxSig(connection, m.publicKey, true);
+            if (sig) {
+              newSigs[keyStr] = sig;
+              changed = true;
+            }
+          } catch (e) {
+            console.error(`[MarketDetailPage] Error fetching prop resolution sig for ${keyStr}:`, e);
+          }
+        }
+      }
+
+      if (changed) {
+        setPropResolutionSigs(newSigs);
+      }
+    };
+
+    fetchPropResolutionSigs();
+  }, [propMarkets, connection]);
 
   // Fetch Bets Feed
   const fetchBets = async () => {
@@ -690,7 +738,22 @@ export default function MarketDetailPage({ params }: PageProps) {
                 </div>
               </div>
 
-              <button className="proof-btn" onClick={() => setShowProofModal(true)}>
+              {resolutionTxSig ? (
+                <a 
+                  className="proof-btn-link"
+                  href={getExplorerUrl(resolutionTxSig, config.rpcUrl)}
+                  target="_blank" 
+                  rel="noreferrer"
+                >
+                  View Settlement Proof <ExternalLink size={14} style={{ marginLeft: '4px', display: 'inline-block', verticalAlign: 'middle' }} />
+                </a>
+              ) : (
+                <button className="proof-btn-link" disabled style={{ opacity: 0.7, cursor: 'not-allowed' }}>
+                  Fetching Settlement Proof...
+                </button>
+              )}
+
+              <button className="proof-btn" onClick={() => setShowProofModal(true)} style={{ marginTop: '0.5rem' }}>
                 View Cryptographic Receipt
               </button>
 
@@ -996,14 +1059,30 @@ export default function MarketDetailPage({ params }: PageProps) {
                       {/* Actions */}
                       <div className="action-box">
                         {marketAcc.resolved ? (
-                          userPos && !userPos.claimed && (
-                            <button
-                              onClick={() => handleClaimPropPosition(m.publicKey)}
-                              className="btn-claim-prop"
-                            >
-                              Claim Payout
-                            </button>
-                          )
+                          <div className="resolved-actions-wrapper">
+                            {userPos && !userPos.claimed && (
+                              <button
+                                onClick={() => handleClaimPropPosition(m.publicKey)}
+                                className="btn-claim-prop"
+                              >
+                                Claim Payout
+                              </button>
+                            )}
+                            {propResolutionSigs[keyStr] ? (
+                              <a 
+                                href={getExplorerUrl(propResolutionSigs[keyStr], config.rpcUrl)}
+                                target="_blank" 
+                                rel="noreferrer"
+                                className="proof-btn-link-prop"
+                              >
+                                View Settlement Proof <ExternalLink size={12} style={{ marginLeft: '4px', display: 'inline-block', verticalAlign: 'middle' }} />
+                              </a>
+                            ) : (
+                              <span className="fetching-sig-label">
+                                Fetching Settlement Proof...
+                              </span>
+                            )}
+                          </div>
                         ) : marketAcc.bettable ? (
                           <div className="bet-form-wrapper">
                             <input
@@ -1057,7 +1136,7 @@ export default function MarketDetailPage({ params }: PageProps) {
         matchId={match?.id || marketIdStr}
         resolvedValue={marketState.resolvedValue}
         proofHash={Buffer.from(marketState.proofHash).toString('hex')}
-        txSig=" settlement_tx_sig_from_localnet_cranker_verified_pda_logs "
+        txSig={resolutionTxSig || 'settlement_tx_sig_from_localnet_cranker_verified_pda_logs'}
       />
 
       <style jsx>{`
@@ -1489,6 +1568,43 @@ export default function MarketDetailPage({ params }: PageProps) {
           background: #059669;
         }
 
+        .resolved-actions-wrapper {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+          width: 100%;
+        }
+
+        .proof-btn-link-prop {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 100%;
+          background: #09090b;
+          color: #ffffff;
+          border: 1px solid #09090b;
+          padding: 0.5rem;
+          font-size: 0.75rem;
+          font-weight: 700;
+          border-radius: 6px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          text-decoration: none;
+          text-align: center;
+        }
+
+        .proof-btn-link-prop:hover {
+          background: #18181b;
+          border-color: #18181b;
+        }
+
+        .fetching-sig-label {
+          font-size: 0.75rem;
+          color: #64748b;
+          font-style: italic;
+          text-align: center;
+        }
+
         .bet-form-wrapper {
           display: flex;
           flex-direction: column;
@@ -1704,6 +1820,29 @@ export default function MarketDetailPage({ params }: PageProps) {
         .proof-btn:hover {
           background: rgba(15, 23, 42, 0.1);
           color: #0f172a;
+        }
+
+        .proof-btn-link {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 100%;
+          padding: 0.85rem;
+          border-radius: 12px;
+          font-size: 0.9rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          background: #09090b;
+          color: #ffffff;
+          border: 1px solid #09090b;
+          text-decoration: none;
+          text-align: center;
+        }
+
+        .proof-btn-link:hover {
+          background: #18181b;
+          border-color: #18181b;
         }
 
         .claim-payout-btn {
