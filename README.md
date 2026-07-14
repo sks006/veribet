@@ -3,7 +3,9 @@
 An advanced, high-performance decentralized sports prediction market protocol on the Solana blockchain. VeriBet enables zero-slippage prediction pools that are settled instantly using cryptographic proofs and TxLINE stream feeds, powered by self-sustaining user-funded gas rebate cranks.
 
 ---
-
+### Verification & On-Chain Proofs
+- **Program ID:** `2Syq46YQQ4iGbCouFYxjeHEcABScMd669NAK5XrxZFWG`
+- **Sample Settlement Tx:** [Verify via Solana Explorer](https://explorer.solana.com/tx/44vGJJhNo1VpMo4J3jS9FE6ehVGdvUagtVn8rS7vJsAoxTg4tvGSAZoDYGTbLomn75khShq5ep8uqDcq5kyZN1cS?cluster=devnet)
 ## 🚀 Key Features
 
 * **Parametric Betting**: Bet on specific statistical targets (e.g., total goals > 2, score yes/no) rather than simple win/lose outcomes.
