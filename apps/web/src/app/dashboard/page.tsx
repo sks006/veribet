@@ -244,6 +244,7 @@ export default function DashboardPage() {
                       key={market.publicKey.toBase58()} 
                       href={`/market/${matchIdStr}`}
                       className="prop-market-card-link"
+                      style={{ textDecoration: 'none' }}
                     >
                       <div className="prop-market-card">
                         {/* Header */}
