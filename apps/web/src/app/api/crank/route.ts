@@ -214,15 +214,20 @@ async function fetchMatchStatsAndEvent(
 
 export async function GET(request: NextRequest) {
   // 1. Authenticate Vercel Cron Trigger
-  const authHeader = request.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
+  const authHeader = (request.headers.get('authorization') || '').trim();
+  const cronSecret = (process.env.CRON_SECRET || '').trim();
   const isDev = process.env.NODE_ENV === 'development';
   const bypassAuth = request.nextUrl.searchParams.get('bypassAuth') === 'true';
 
-  if (!isDev || !bypassAuth) {
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      return new NextResponse('Unauthorized Instruction Call', { status: 401 });
-    }
+  let isAuthorized = false;
+  if (isDev && bypassAuth) {
+    isAuthorized = true;
+  } else if (cronSecret) {
+    isAuthorized = authHeader === `Bearer ${cronSecret}` || authHeader === cronSecret;
+  }
+
+  if (!isAuthorized) {
+    return new NextResponse('Unauthorized Instruction Call', { status: 401 });
   }
 
   const reports: string[] = [];

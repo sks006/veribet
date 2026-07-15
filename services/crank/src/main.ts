@@ -1,7 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { Keypair } from '@solana/web3.js';
-import { SseClient } from './sse-client';
+import { Keypair, Connection, PublicKey } from '@solana/web3.js';
 import { ProofHandler } from './proof-handler';
 import { CrankSubmitter } from './crank-submitter';
 import { TxLineEvent } from './types';
@@ -11,267 +10,387 @@ import { config } from './config';
 
 const RPC_URL = config.rpcUrl;
 const PROGRAM_ID = config.programId;
-const AUTHORITY_KEY_PATH = process.env.AUTHORITY_KEY_PATH || './authority-keypair.json';
 const txlineBase = config.txlineApiOrigin;
-const TXLINE_URL = process.env.TXLINE_URL || `${txlineBase}/api/scores/stream`;
-const ORACLE_PUBLIC_KEY = process.env.ORACLE_PUBLIC_KEY || 'mock';
 
-function loadKeypair(path: string): Keypair {
+interface PropStats {
+  fouls: [number, number];
+  redCards: [number, number];
+  yellowCards: [number, number];
+  corners: [number, number];
+  freeKicks: [number, number];
+  matchMinute: number;
+}
+
+function getCrankSigner(): Keypair {
+  const rawKey = process.env.CRANK_SIGNER_KEY || process.env.AUTHORITY_KEY;
+  if (!rawKey) {
+    // Fallback search local directory authority file if dev
+    let localPath = path.resolve(process.cwd(), '../../authority-keypair.json');
+    if (!fs.existsSync(localPath)) {
+      localPath = path.resolve(process.cwd(), 'authority-keypair.json');
+    }
+    if (fs.existsSync(localPath)) {
+      const raw = fs.readFileSync(localPath, 'utf8');
+      console.log(`[Crank Main] Loaded authority keypair from file: ${localPath}`);
+      return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(raw)));
+    }
+    throw new Error("Missing CRANK_SIGNER_KEY/AUTHORITY_KEY environment allocation.");
+  }
+
   try {
-    const raw = fs.readFileSync(path, 'utf8');
-    const secretKey = Uint8Array.from(JSON.parse(raw));
-    return Keypair.fromSecretKey(secretKey);
-  } catch (err) {
-    console.log(`[Crank Main] Keypair not found at ${path}. Generating a new temporary keypair...`);
-    const kp = Keypair.generate();
-    fs.writeFileSync(path, JSON.stringify(Array.from(kp.secretKey)));
-    return kp;
+    if (rawKey.trim().startsWith('[')) {
+      const secretKey = Uint8Array.from(JSON.parse(rawKey));
+      return Keypair.fromSecretKey(secretKey);
+    } else {
+      const decoded = anchor.utils.bytes.bs58.decode(rawKey.trim());
+      return Keypair.fromSecretKey(decoded);
+    }
+  } catch (err: any) {
+    throw new Error(`Failed to parse CRANK_SIGNER_KEY: ${err.message}`);
   }
 }
 
-async function main() {
-  console.log('[Crank Main] Starting VeriBet Crank Service...');
-  console.log(`[Crank Main] RPC URL: ${RPC_URL}`);
-  console.log(`[Crank Main] Program ID: ${PROGRAM_ID}`);
-  console.log(`[Crank Main] Oracle Pubkey: ${ORACLE_PUBLIC_KEY}`);
+function parseSseBlock(block: string): { data: string } | null {
+  const message = { data: "" };
+  for (const rawLine of block.split(/\r?\n/)) {
+    if (!rawLine || rawLine.startsWith(":")) continue;
+    const separatorIndex = rawLine.indexOf(":");
+    const field = separatorIndex === -1 ? rawLine : rawLine.slice(0, separatorIndex);
+    const value = separatorIndex === -1 ? "" : rawLine.slice(separatorIndex + 1).replace(/^ /, "");
+    if (field === "data") message.data += `${value}\n`;
+  }
+  message.data = message.data.replace(/\n$/, "");
+  return message.data ? message : null;
+}
 
-  const authorityKeypair = loadKeypair(AUTHORITY_KEY_PATH);
-  console.log(`[Crank Main] Authority Pubkey: ${authorityKeypair.publicKey.toBase58()}`);
+function getStatValue(stats: PropStats, eventType: number, team: number): number {
+  const teamIdx = team === 1 ? 1 : 0;
+  switch (eventType) {
+    case 0: return stats.fouls[teamIdx];
+    case 1: return stats.redCards[teamIdx];
+    case 2: return stats.yellowCards[teamIdx];
+    case 3: return stats.corners[teamIdx];
+    case 4: return stats.freeKicks[teamIdx];
+    default: return 0;
+  }
+}
 
-  // Instantiate Submitter
-  const submitter = new CrankSubmitter(RPC_URL, PROGRAM_ID, authorityKeypair);
+function evaluatePropResolution(marketAccount: any, stats: PropStats): boolean {
+  const value = getStatValue(stats, marketAccount.eventType, marketAccount.team);
+  if (marketAccount.comparator === 0) {
+    return value >= marketAccount.threshold;
+  } else if (marketAccount.comparator === 1) {
+    return value <= marketAccount.threshold;
+  } else if (marketAccount.comparator === 2) {
+    return value > 0;
+  }
+  return false;
+}
 
-  // Set up connection for scanning
-  const connection = new anchor.web3.Connection(RPC_URL, 'confirmed');
-  const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(authorityKeypair), { commitment: 'confirmed' });
-  const program = new anchor.Program(idlJson as any, provider) as any;
+async function fetchMatchStatsAndEvent(
+  matchId: string,
+  jwt: string,
+  apiToken: string,
+  apiOrigin: string
+): Promise<{ stats: PropStats; finalEvent: TxLineEvent } | null> {
+  const headers = {
+    'Authorization': `Bearer ${jwt}`,
+    'X-Api-Token': apiToken
+  };
 
-  // Try to load API token from txline-config.json
-  let apiToken = process.env.TXLINE_API_TOKEN || '';
+  const url = `${apiOrigin}/api/scores/historical/${matchId}`;
   try {
-    const configPath = path.resolve(__dirname, '../../../../txline-config.json');
-    const localConfigPath = path.resolve(process.cwd(), 'txline-config.json');
-    const parentConfigPath = path.resolve(process.cwd(), '../txline-config.json');
-    const workspaceConfigPath = path.resolve(process.cwd(), '../../txline-config.json');
-
-    let resolvedPath = '';
-    if (fs.existsSync(configPath)) resolvedPath = configPath;
-    else if (fs.existsSync(localConfigPath)) resolvedPath = localConfigPath;
-    else if (fs.existsSync(parentConfigPath)) resolvedPath = parentConfigPath;
-    else if (fs.existsSync(workspaceConfigPath)) resolvedPath = workspaceConfigPath;
-
-    if (resolvedPath) {
-      const config = JSON.parse(fs.readFileSync(resolvedPath, 'utf8'));
-      if (config.apiToken) {
-        apiToken = config.apiToken;
-        console.log(`[Crank Main] Loaded TxLINE API Token from config file: ${resolvedPath}`);
-      }
+    const res = await fetch(url, { method: 'GET', headers });
+    if (res.status !== 200) {
+      return null;
     }
-  } catch (e: any) {
-    console.error('[Crank Main] Error loading saved token:', e.message);
-  }
+    const text = await res.text();
+    const blocks = text.split(/\n\n+/);
+    
+    const stats: PropStats = {
+      fouls: [0, 0],
+      redCards: [0, 0],
+      yellowCards: [0, 0],
+      corners: [0, 0],
+      freeKicks: [0, 0],
+      matchMinute: 0
+    };
+    
+    let lastEvent: TxLineEvent | null = null;
 
-  const headers: Record<string, string> = {
-    'Accept': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-    'Authorization': `Bearer ${process.env.TXLINE_GUEST_JWT || ''}`,
-    'X-Api-Token': process.env.TXLINE_ACTIVATED_TOKEN || apiToken
-  };
+    for (const block of blocks) {
+      if (!block.trim()) continue;
+      const parsed = parseSseBlock(block);
+      if (parsed && parsed.data) {
+        try {
+          const rawPayload = JSON.parse(parsed.data);
+          
+          const info = rawPayload.FixtureInfo || {};
+          const update = rawPayload.Update || {};
+          const p1IsHome = info.Participant1IsHome ?? rawPayload.Participant1IsHome ?? true;
+          const rawP1 = info.Participant1 || rawPayload.Participant1 || rawPayload.homeTeam || '';
+          const rawP2 = info.Participant2 || rawPayload.Participant2 || rawPayload.awayTeam || '';
+          const homeTeam = p1IsHome ? rawP1 : rawP2;
+          const awayTeam = p1IsHome ? rawP2 : rawP1;
 
-  if (!process.env.TXLINE_GUEST_JWT && apiToken) {
-    headers['Authorization'] = `Bearer ${apiToken}`;
-  }
-
-  if (process.env.TXLINE_ACTIVATED_TOKEN || apiToken) {
-    headers['x-api-key'] = process.env.TXLINE_ACTIVATED_TOKEN || apiToken;
-  }
-
-  // Stats cache for prop markets tracking
-  interface PropStats {
-    fouls: [number, number];
-    redCards: [number, number];
-    yellowCards: [number, number];
-    corners: [number, number];
-    freeKicks: [number, number];
-    matchMinute: number;
-  }
-
-  const matchStatsCache: Record<string, PropStats> = {};
-
-  const getStatValue = (stats: PropStats, eventType: number, team: number): number => {
-    const teamIdx = team === 1 ? 1 : 0;
-    switch (eventType) {
-      case 0: return stats.fouls[teamIdx];
-      case 1: return stats.redCards[teamIdx];
-      case 2: return stats.yellowCards[teamIdx];
-      case 3: return stats.corners[teamIdx];
-      case 4: return stats.freeKicks[teamIdx];
-      default: return 0;
-    }
-  };
-
-  const evaluatePropResolution = (marketAccount: any, stats: PropStats): boolean => {
-    const value = getStatValue(stats, marketAccount.eventType, marketAccount.team);
-    // comparator: 0=CountGte, 1=CountLte, 2=Occurs
-    if (marketAccount.comparator === 0) {
-      return value >= marketAccount.threshold;
-    } else if (marketAccount.comparator === 1) {
-      return value <= marketAccount.threshold;
-    } else if (marketAccount.comparator === 2) {
-      return value > 0;
-    }
-    return false;
-  };
-
-  // Set up SSE client
-  const sseClient = new SseClient(TXLINE_URL, headers);
-
-  sseClient.onMessage(async (data: string) => {
-    try {
-      const event: TxLineEvent = JSON.parse(data);
-      console.log(`[Crank Main] Received match event: ${event.matchId} | Status: ${event.status}`);
-
-      // 1. Maintain running stats counter
-      if (!matchStatsCache[event.matchId]) {
-        matchStatsCache[event.matchId] = {
-          fouls: [0, 0],
-          redCards: [0, 0],
-          yellowCards: [0, 0],
-          corners: [0, 0],
-          freeKicks: [0, 0],
-          matchMinute: 0
-        };
-      }
-
-      const stats = matchStatsCache[event.matchId];
-
-      if (event.matchMinute !== undefined) {
-        stats.matchMinute = event.matchMinute;
-      } else {
-        if (event.status === 'LIVE') {
-          stats.matchMinute = Math.min(90, stats.matchMinute + 1);
-        } else if (event.status === 'FINISHED') {
-          stats.matchMinute = 90;
-        }
-      }
-
-      if (event.eventType && event.team !== undefined) {
-        const teamIdx = event.team === 1 ? 1 : 0;
-        if (event.eventType === 'foul') stats.fouls[teamIdx]++;
-        else if (event.eventType === 'red_card') stats.redCards[teamIdx]++;
-        else if (event.eventType === 'yellow_card') stats.yellowCards[teamIdx]++;
-        else if (event.eventType === 'corner') stats.corners[teamIdx]++;
-        else if (event.eventType === 'free_kick') stats.freeKicks[teamIdx]++;
-      } else {
-        // Fallback simulated metrics when receiving generic updates
-        const currentTotal = stats.corners[0] + stats.corners[1] + stats.fouls[0] + stats.fouls[1];
-        if (event.totalStats > currentTotal) {
-          const diff = event.totalStats - currentTotal;
-          for (let i = 0; i < diff; i++) {
-            const team = (currentTotal + i) % 2 === 0 ? 0 : 1;
-            const isCorner = (currentTotal + i) % 3 === 0;
-            if (isCorner) {
-              stats.corners[team]++;
-            } else {
-              stats.fouls[team]++;
-            }
+          let homeScore = 0;
+          let awayScore = 0;
+          if (update.Scores) {
+            homeScore = update.Scores.Participant1 ?? 0;
+            awayScore = update.Scores.Participant2 ?? 0;
+          } else if (rawPayload.Scores) {
+            homeScore = rawPayload.Scores.Participant1 ?? 0;
+            awayScore = rawPayload.Scores.Participant2 ?? 0;
+          } else {
+            homeScore = rawPayload.homeScore ?? rawPayload.home_score ?? 0;
+            awayScore = rawPayload.awayScore ?? rawPayload.away_score ?? 0;
           }
-        }
-      }
 
-      // 2. Fetch and check Binary Prop Markets
-      try {
-        const allPropMarkets = await program.account.binaryPropMarket.all();
-        const propMatched = allPropMarkets.filter((m: any) => {
-          const mIdStr = Buffer.from(m.account.matchId)
-            .toString('utf8')
-            .replace(/\0/g, '');
-          return mIdStr === event.matchId;
-        });
+          const statusId = update.StatusId ?? rawPayload.GameState ?? 2;
+          const statusStr = statusId === 3 ? 'FINISHED' : (statusId === 2 ? 'LIVE' : 'SCHEDULED');
+          
+          const event: TxLineEvent = {
+            matchId,
+            status: statusStr,
+            homeScore,
+            awayScore,
+            totalStats: homeScore + awayScore,
+            timestamp: Date.now(),
+            signature: rawPayload.signature || update.ServerId || 'txline_verified_signature',
+            eventType: rawPayload.eventType || undefined,
+            team: rawPayload.team !== undefined ? rawPayload.team : undefined,
+            matchMinute: rawPayload.matchMinute || undefined
+          };
+          
+          lastEvent = event;
 
-        for (const m of propMatched) {
-          // Check early close gating
-          if (m.account.bettable && !m.account.resolved) {
-            let shouldClose = false;
-            const currentMinute = stats.matchMinute;
-            
-            if (m.account.window === 0 && currentMinute >= 35) {
-              shouldClose = true;
-            } else if (m.account.window === 1 && currentMinute >= 80) {
-              shouldClose = true;
-            } else if (m.account.window === 2 && currentMinute >= 0 && event.status !== 'SCHEDULED') {
-              shouldClose = true;
-            }
-
-            if (shouldClose) {
-              console.log(`[Crank Main] Early close triggered for market ${m.publicKey.toBase58()} (Minute ${currentMinute})`);
-              try {
-                await submitter.submitCloseBettingEarly(m.publicKey);
-              } catch (err: any) {
-                console.error(`[Crank Main] Failed to close betting early for ${m.publicKey.toBase58()}: ${err.message}`);
+          if (event.eventType && event.team !== undefined) {
+            const teamIdx = event.team === 1 ? 1 : 0;
+            if (event.eventType === 'foul') stats.fouls[teamIdx]++;
+            else if (event.eventType === 'red_card') stats.redCards[teamIdx]++;
+            else if (event.eventType === 'yellow_card') stats.yellowCards[teamIdx]++;
+            else if (event.eventType === 'corner') stats.corners[teamIdx]++;
+            else if (event.eventType === 'free_kick') stats.freeKicks[teamIdx]++;
+          } else {
+            const currentTotal = stats.corners[0] + stats.corners[1] + stats.fouls[0] + stats.fouls[1];
+            if (event.totalStats > currentTotal) {
+              const diff = event.totalStats - currentTotal;
+              for (let i = 0; i < diff; i++) {
+                const team = (currentTotal + i) % 2 === 0 ? 0 : 1;
+                const isCorner = (currentTotal + i) % 3 === 0;
+                if (isCorner) {
+                  stats.corners[team]++;
+                } else {
+                  stats.fouls[team]++;
+                }
               }
             }
           }
+        } catch {}
+      }
+    }
 
-          // Check resolution gating
-          if (event.status === 'FINISHED' && !m.account.resolved) {
-            const resolvedValue = evaluatePropResolution(m.account, stats);
-            const proofHash = Array.from(ProofHandler.generateProofHash(event));
-            console.log(`[Crank Main] Resolving prop market ${m.publicKey.toBase58()} to ${resolvedValue}`);
-            try {
-              await submitter.submitPropResolution(m.publicKey, m.account, resolvedValue, proofHash);
-            } catch (err: any) {
-              console.error(`[Crank Main] Failed to resolve prop market ${m.publicKey.toBase58()}: ${err.message}`);
-            }
-          }
+    if (lastEvent) {
+      return { stats, finalEvent: lastEvent };
+    }
+  } catch (err: any) {
+    console.error(`[Crank Main] Error fetching historical scores for ${matchId}:`, err.message);
+  }
+  return null;
+}
+
+async function main() {
+  console.log('[Crank Main] Starting Stateless VeriBet Crank Service...');
+  console.log(`[Crank Main] RPC URL: ${RPC_URL}`);
+  console.log(`[Crank Main] Program ID: ${PROGRAM_ID}`);
+
+  // 1. Resolve Authority Wallet (Crank Signer)
+  const authorityKeypair = getCrankSigner();
+  console.log(`[Crank Main] Authority Pubkey: ${authorityKeypair.publicKey.toBase58()}`);
+
+  // 2. Instantiate Submitter and Anchor Program
+  const submitter = new CrankSubmitter(RPC_URL, PROGRAM_ID, authorityKeypair);
+  const connection = new Connection(RPC_URL, 'confirmed');
+  const dummyWallet = {
+    publicKey: authorityKeypair.publicKey,
+    signTransaction: async (tx: any) => {
+      tx.partialSign(authorityKeypair);
+      return tx;
+    },
+    signAllTransactions: async (txs: any[]) => {
+      txs.forEach(t => t.partialSign(authorityKeypair));
+      return txs;
+    },
+  };
+  const provider = new anchor.AnchorProvider(connection, dummyWallet as any, { commitment: 'confirmed' });
+  const program = new anchor.Program(idlJson as any, provider) as any;
+
+  // 3. Resolve TxLINE API Token
+  let apiToken = process.env.TXLINE_API_TOKEN || '';
+  if (!apiToken) {
+    try {
+      const pathsToSearch = [
+        path.join(process.cwd(), '../../txline-config.json'),
+        path.join(process.cwd(), '../txline-config.json'),
+        path.join(process.cwd(), 'txline-config.json'),
+        path.join(__dirname, '../../../../txline-config.json'),
+        path.join(__dirname, '../../../../../../txline-config.json'),
+      ];
+      let foundPath = '';
+      for (const p of pathsToSearch) {
+        if (fs.existsSync(p)) {
+          foundPath = p;
+          break;
         }
-      } catch (err: any) {
-        console.error(`[Crank Main] Error processing binary prop markets: ${err.message}`);
       }
-
-      // 3. Process normal parametric markets
-      if (event.status !== 'FINISHED') {
-        return;
-      }
-
-      // Verify cryptographic signature for normal market resolution
-      const isValid = ProofHandler.verifyProof(event, ORACLE_PUBLIC_KEY);
-      if (!isValid) {
-        console.warn(`[Crank Main] Invalid signature for event ${event.matchId}. Skipping normal resolution.`);
-        return;
-      }
-
-      console.log(`[Crank Main] Proof verified for finished match ${event.matchId}. Scanning standard parametric markets...`);
-
-      const allMarkets = await program.account.parametricMarket.all();
-      const matched = allMarkets.filter((market: any) => {
-        const matchIdStr = Buffer.from(market.account.matchIdBytes)
-          .toString('utf8')
-          .replace(/\0/g, '');
-        return matchIdStr === event.matchId && !market.account.isResolved;
-      });
-
-      console.log(`[Crank Main] Found ${matched.length} unresolved standard markets for ${event.matchId}`);
-
-      for (const market of matched) {
-        const marketIdNum = market.account.marketId.toNumber();
-        try {
-          const txSig = await submitter.submitResolution(event, marketIdNum);
-          if (txSig) {
-            console.log(`[Crank Main] Successfully resolved market ID ${marketIdNum}. Tx: ${txSig}`);
-          }
-        } catch (err: any) {
-          console.error(`[Crank Main] Failed to resolve market ${marketIdNum}: ${err.message}`);
+      if (foundPath) {
+        const savedConfig = JSON.parse(fs.readFileSync(foundPath, 'utf8'));
+        if (savedConfig.apiToken) {
+          apiToken = savedConfig.apiToken;
+          console.log(`[Crank Main] Loaded TxLINE token from config file: ${foundPath}`);
         }
       }
-    } catch (err: any) {
-      console.error(`[Crank Main] Error processing message: ${err.message}`);
+    } catch (e: any) {
+      console.warn("[Crank Main] Failed to load local config token:", e.message);
+    }
+  }
+
+  // 4. Negotiate TxLINE authentication and fetch baseline snapshot
+  const targetNetwork = config.network;
+  const apiOrigin = txlineBase;
+
+  console.log(`[Crank Main] Fetching TxLINE auth guest JWT from ${apiOrigin}...`);
+  const authRes = await fetch(`${apiOrigin}/auth/guest/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' }
+  });
+  if (!authRes.ok) {
+    throw new Error(`Guest auth failed with status ${authRes.status}`);
+  }
+  const authData = (await authRes.json()) as any;
+  const jwt = authData.token || authData.jwt || '';
+
+  console.log(`[Crank Main] Fetching baseline snapshot...`);
+  const fixturesRes = await fetch(`${apiOrigin}/api/fixtures/snapshot`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${jwt}`,
+      'X-Api-Token': apiToken
     }
   });
+  if (!fixturesRes.ok) {
+    throw new Error(`Baseline snapshot fetch returned status ${fixturesRes.status}`);
+  }
+  const fixtures = (await fixturesRes.json()) as any[];
+  console.log(`[Crank Main] Snapshot loaded. Total fixtures: ${fixtures.length}`);
 
-  // Start client
-  sseClient.start();
+  // 5. Scan on-chain markets
+  console.log(`[Crank Main] Scanning unresolved accounts from Solana...`);
+  const unresolvedPropMarkets = (await program.account.binaryPropMarket.all()).filter((m: any) => !m.account.resolved);
+  const unresolvedParametricMarkets = (await program.account.parametricMarket.all()).filter((m: any) => !m.account.isResolved);
+  
+  console.log(`[Crank Main] Found ${unresolvedPropMarkets.length} unresolved Prop Markets and ${unresolvedParametricMarkets.length} standard Parametric Markets.`);
+
+  // 6. Iterate Prop Markets
+  for (const m of unresolvedPropMarkets) {
+    const matchIdStr = Buffer.from(m.account.matchId)
+      .toString('utf8')
+      .replace(/\0/g, '');
+
+    console.log(`[Crank Main] Checking Prop Market ${m.publicKey.toBase58()} (Match ID: ${matchIdStr})`);
+    
+    const fixture = fixtures.find(f => String(f.FixtureId || f.id) === matchIdStr);
+    if (!fixture) {
+      console.log(`[Crank Main] Match ID ${matchIdStr} not found in TxLINE snapshot. Skipping.`);
+      continue;
+    }
+
+    const result = await fetchMatchStatsAndEvent(matchIdStr, jwt, apiToken, apiOrigin);
+    if (!result) {
+      console.log(`[Crank Main] Historical scores not available for ${matchIdStr}. Skipping.`);
+      continue;
+    }
+
+    const { stats, finalEvent } = result;
+
+    // Check early close gating
+    if (m.account.bettable) {
+      let shouldClose = false;
+      const currentMinute = stats.matchMinute;
+
+      if (m.account.window === 0 && currentMinute >= 35) shouldClose = true;
+      else if (m.account.window === 1 && currentMinute >= 80) shouldClose = true;
+      else if (m.account.window === 2 && finalEvent.status !== 'SCHEDULED') shouldClose = true;
+
+      if (shouldClose) {
+        console.log(`[Crank Main] Early close triggered for market ${m.publicKey.toBase58()} (Minute ${currentMinute})`);
+        try {
+          const txSig = await submitter.submitCloseBettingEarly(m.publicKey);
+          if (txSig) {
+            console.log(`[Crank Main] Betting closed early! Tx Sig: ${txSig}`);
+          }
+        } catch (err: any) {
+          console.error(`[Crank Main] Failed to close betting early for ${m.publicKey.toBase58()}: ${err.message}`);
+        }
+      }
+    }
+
+    // Check resolution gating
+    if (finalEvent.status === 'FINISHED') {
+      const resolvedValue = evaluatePropResolution(m.account, stats);
+      const proofHash = Array.from(ProofHandler.generateProofHash(finalEvent));
+      console.log(`[Crank Main] Resolving prop market ${m.publicKey.toBase58()} to ${resolvedValue}`);
+      
+      try {
+        const txSig = await submitter.submitPropResolution(m.publicKey, m.account, resolvedValue, proofHash);
+        if (txSig) {
+          console.log(`[Crank Main] Prop market resolved successfully! Tx Sig: ${txSig}`);
+        }
+      } catch (err: any) {
+        console.error(`[Crank Main] Failed to resolve prop market ${m.publicKey.toBase58()}: ${err.message}`);
+      }
+    }
+  }
+
+  // 7. Iterate standard Parametric Markets
+  for (const m of unresolvedParametricMarkets) {
+    const matchIdStr = Buffer.from(m.account.matchIdBytes)
+      .toString('utf8')
+      .replace(/\0/g, '');
+
+    console.log(`[Crank Main] Checking Parametric Market ${m.publicKey.toBase58()} (Match ID: ${matchIdStr})`);
+
+    const fixture = fixtures.find(f => String(f.FixtureId || f.id) === matchIdStr);
+    if (!fixture) {
+      console.log(`[Crank Main] Match ID ${matchIdStr} not found in TxLINE snapshot. Skipping.`);
+      continue;
+    }
+
+    const result = await fetchMatchStatsAndEvent(matchIdStr, jwt, apiToken, apiOrigin);
+    if (!result) {
+      console.log(`[Crank Main] Historical scores not available for ${matchIdStr}. Skipping.`);
+      continue;
+    }
+
+    const { finalEvent } = result;
+
+    // Check resolution gating
+    if (finalEvent.status === 'FINISHED') {
+      const marketIdNum = m.account.marketId.toNumber();
+      console.log(`[Crank Main] Resolving parametric market ${m.publicKey.toBase58()} (Market ID: ${marketIdNum})`);
+
+      try {
+        const txSig = await submitter.submitResolution(finalEvent, marketIdNum);
+        if (txSig) {
+          console.log(`[Crank Main] Parametric market resolved successfully! Tx Sig: ${txSig}`);
+        }
+      } catch (err: any) {
+        console.error(`[Crank Main] Failed to resolve parametric market ${m.publicKey.toBase58()}: ${err.message}`);
+      }
+    }
+  }
+
+  console.log('[Crank Main] Execution complete.');
 }
 
 main().catch((err) => {
