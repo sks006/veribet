@@ -5,7 +5,7 @@ import { ProofHandler } from './proof-handler';
 import { CrankSubmitter } from './crank-submitter';
 import { TxLineEvent } from './types';
 import * as anchor from '@coral-xyz/anchor';
-import idlJson from '../../../apps/web/src/types/veribet.json';
+import idlJson from '../../../target/idl/veribet.json';
 import { config } from './config';
 
 const RPC_URL = config.rpcUrl;

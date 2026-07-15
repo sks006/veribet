@@ -3,7 +3,7 @@ import { Connection, Keypair, PublicKey } from '@solana/web3.js';
 import { getAccount, getAssociatedTokenAddress } from '@solana/spl-token';
 import { TxLineEvent } from './types';
 import { ProofHandler } from './proof-handler';
-import idlJson from '../../../apps/web/src/types/veribet.json';
+import idlJson from '../../../target/idl/veribet.json';
 
 export class CrankSubmitter {
   private connection: Connection;
