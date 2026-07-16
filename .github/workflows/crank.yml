@@ -36,6 +36,8 @@ jobs:
           npm ci
 
       - name: Verify Secret Availability
+        env:
+          CRANK_SIGNER_KEY: ${{ secrets.CRANK_SIGNER_KEY }}
         run: |
           set -euo pipefail
           # Use parameter expansion to avoid unbound variable errors and avoid echoing secrets
