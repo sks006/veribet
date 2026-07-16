@@ -11,6 +11,14 @@ jobs:
     runs-on: ubuntu-latest
     environment: devnet
 
+    # Inject secrets into the job environment so all steps can access them safely
+    env:
+      RPC_URL: ${{ secrets.RPC_URL }}
+      VERIBET_PROGRAM_ID: ${{ secrets.VERIBET_PROGRAM_ID }}
+      ORACLE_PUBLIC_KEY: ${{ secrets.ORACLE_PUBLIC_KEY }}
+      CRANK_SIGNER_KEY: ${{ secrets.CRANK_SIGNER_KEY }}
+      TXLINE_API_ORIGIN: https://txline-dev.txodds.com
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -29,8 +37,10 @@ jobs:
 
       - name: Verify Secret Availability
         run: |
-          if [ -z "${{ secrets.CRANK_SIGNER_KEY }}" ]; then
-            echo "CRITICAL: GitHub Secrets are NOT accessible to this runner instance."
+          set -euo pipefail
+          # Use parameter expansion to avoid unbound variable errors and avoid echoing secrets
+          if [ -z "${CRANK_SIGNER_KEY:-}" ]; then
+            echo "CRITICAL: CRANK_SIGNER_KEY is not set. Check repository or environment secrets and environment protection rules."
             exit 1
           else
             echo "SUCCESS: Cryptographic signer allocation is present in memory."
@@ -40,9 +50,4 @@ jobs:
         run: |
           cd services/crank
           npx ts-node src/main.ts
-        env:
-          RPC_URL: ${{ secrets.RPC_URL }}
-          VERIBET_PROGRAM_ID: ${{ secrets.VERIBET_PROGRAM_ID }}
-          CRANK_SIGNER_KEY: ${{ secrets.CRANK_SIGNER_KEY }}
-          TXLINE_API_ORIGIN: https://txline-dev.txodds.com
-          ORACLE_PUBLIC_KEY: ${{ secrets.ORACLE_PUBLIC_KEY }}
+        # secrets are already provided at the job level via `env:` above
