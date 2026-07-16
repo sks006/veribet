@@ -8,6 +8,7 @@ export interface Config {
   txlineApiOrigin: string;
   txlineServiceLevel: number;
   txlineDurationWeeks: number;
+  oraclePublicKey: string;
 }
 
 export function getConfig(env: NodeJS.ProcessEnv): Config {
@@ -17,6 +18,7 @@ export function getConfig(env: NodeJS.ProcessEnv): Config {
   const txlineApiOrigin = env.TXLINE_API_ORIGIN || 'https://txline-dev.txodds.com';
   const txlineServiceLevel = parseInt(env.TXLINE_SERVICE_LEVEL || '1', 10);
   const txlineDurationWeeks = parseInt(env.TXLINE_DURATION_WEEKS || '4', 10);
+  const oraclePublicKey = env.ORACLE_PUBLIC_KEY || 'mock';
 
   // Validate required fields
   if (!programId) {
@@ -33,6 +35,7 @@ export function getConfig(env: NodeJS.ProcessEnv): Config {
     txlineApiOrigin,
     txlineServiceLevel,
     txlineDurationWeeks,
+    oraclePublicKey,
   };
 }
 

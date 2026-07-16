@@ -337,6 +337,10 @@ async function main() {
 
     // Check resolution gating
     if (finalEvent.status === 'FINISHED') {
+      if (!ProofHandler.verifyProof(finalEvent, config.oraclePublicKey)) {
+        console.error(`[Crank Main] Cryptographic verification failed for prop market ${m.publicKey.toBase58()} (Match ID: ${matchIdStr}). Skipping resolution.`);
+        continue;
+      }
       const resolvedValue = evaluatePropResolution(m.account, stats);
       const proofHash = Array.from(ProofHandler.generateProofHash(finalEvent));
       console.log(`[Crank Main] Resolving prop market ${m.publicKey.toBase58()} to ${resolvedValue}`);
@@ -376,6 +380,10 @@ async function main() {
 
     // Check resolution gating
     if (finalEvent.status === 'FINISHED') {
+      if (!ProofHandler.verifyProof(finalEvent, config.oraclePublicKey)) {
+        console.error(`[Crank Main] Cryptographic verification failed for parametric market ${m.publicKey.toBase58()} (Match ID: ${matchIdStr}). Skipping resolution.`);
+        continue;
+      }
       const marketIdNum = m.account.marketId.toNumber();
       console.log(`[Crank Main] Resolving parametric market ${m.publicKey.toBase58()} (Market ID: ${marketIdNum})`);
 
