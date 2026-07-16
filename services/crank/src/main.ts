@@ -149,13 +149,15 @@ async function fetchMatchStatsAndEvent(
           const statusId = update.StatusId ?? rawPayload.GameState ?? 2;
           const statusStr = statusId === 3 ? 'FINISHED' : (statusId === 2 ? 'LIVE' : 'SCHEDULED');
           
+          const timestamp = rawPayload.Ts || rawPayload.timestamp || update.Ts || Date.now();
+          
           const event: TxLineEvent = {
             matchId,
             status: statusStr,
             homeScore,
             awayScore,
             totalStats: homeScore + awayScore,
-            timestamp: Date.now(),
+            timestamp,
             signature: rawPayload.signature || update.ServerId || 'txline_verified_signature',
             eventType: rawPayload.eventType || undefined,
             team: rawPayload.team !== undefined ? rawPayload.team : undefined,

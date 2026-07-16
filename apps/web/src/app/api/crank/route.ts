@@ -95,6 +95,34 @@ function evaluatePropResolution(marketAccount: any, stats: PropStats): boolean {
   return false;
 }
 
+function verifyProof(event: TxLineEvent, publicKeyHex: string): boolean {
+  if (publicKeyHex === 'mock' || !publicKeyHex) {
+    console.log(`[Crank API] Bypassing cryptographic validation for match: ${event.matchId} (Mock Mode)`);
+    return true;
+  }
+
+  try {
+    const message = `${event.matchId}:${event.status}:${event.homeScore}:${event.awayScore}:${event.totalStats}:${event.timestamp}`;
+    const msgBuffer = Buffer.from(message, 'utf8');
+    const sigBuffer = Buffer.from(event.signature, 'hex');
+    const pubKeyBuffer = Buffer.from(publicKeyHex, 'hex');
+
+    return crypto.verify(
+      undefined,
+      msgBuffer,
+      {
+        key: pubKeyBuffer,
+        format: 'der',
+        type: 'spki',
+      },
+      sigBuffer
+    );
+  } catch (err: any) {
+    console.error(`[Crank API] Cryptographic verification failed: ${err.message}`);
+    return false;
+  }
+}
+
 async function fetchMatchStatsAndEvent(
   matchId: string,
   jwt: string,
@@ -157,13 +185,15 @@ async function fetchMatchStatsAndEvent(
           const statusId = update.StatusId ?? rawPayload.GameState ?? 2;
           const statusStr = statusId === 3 ? 'FINISHED' : (statusId === 2 ? 'LIVE' : 'SCHEDULED');
           
+          const timestamp = rawPayload.Ts || rawPayload.timestamp || update.Ts || Date.now();
+
           const event: TxLineEvent = {
             matchId,
             status: statusStr,
             homeScore,
             awayScore,
             totalStats: homeScore + awayScore,
-            timestamp: Date.now(),
+            timestamp,
             signature: rawPayload.signature || update.ServerId || 'txline_verified_signature',
             eventType: rawPayload.eventType || undefined,
             team: rawPayload.team !== undefined ? rawPayload.team : undefined,
@@ -402,6 +432,11 @@ export async function GET(request: NextRequest) {
 
       // Check resolution gating
       if (finalEvent.status === 'FINISHED') {
+        const oraclePublicKey = process.env.ORACLE_PUBLIC_KEY || 'mock';
+        if (!verifyProof(finalEvent, oraclePublicKey)) {
+          reports.push(`[Crank API] Cryptographic verification failed for prop market ${m.publicKey.toBase58()} (Match ID: ${matchIdStr}). Skipping resolution.`);
+          continue;
+        }
         const resolvedValue = evaluatePropResolution(m.account, stats);
         const proofHash = generateProofHash(finalEvent);
         reports.push(`[Crank API] Resolving prop market ${m.publicKey.toBase58()} to ${resolvedValue}`);
@@ -455,6 +490,11 @@ export async function GET(request: NextRequest) {
 
       // Check resolution gating
       if (finalEvent.status === 'FINISHED') {
+        const oraclePublicKey = process.env.ORACLE_PUBLIC_KEY || 'mock';
+        if (!verifyProof(finalEvent, oraclePublicKey)) {
+          reports.push(`[Crank API] Cryptographic verification failed for parametric market ${m.publicKey.toBase58()} (Match ID: ${matchIdStr}). Skipping resolution.`);
+          continue;
+        }
         let resolvedValue = 0;
         if (m.account.marketType === 0) {
           resolvedValue = finalEvent.totalStats;

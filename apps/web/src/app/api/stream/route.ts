@@ -3,6 +3,7 @@ import * as http from 'http';
 import * as https from 'https';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 
 // -------------------------------------------------------------
 // Type Schemas & Environment Isolation Layer
@@ -32,6 +33,35 @@ interface FixtureState {
   awayTeam?: string;
   sport?: string;
   kickoffTime?: number;
+}
+
+function signEventIfPossible(
+  matchId: string,
+  status: string,
+  homeScore: number,
+  awayScore: number,
+  totalStats: number,
+  timestamp: number,
+  fallbackSignature: string
+): string {
+  const oraclePrivateKeyHex = process.env.ORACLE_PRIVATE_KEY;
+  if (oraclePrivateKeyHex && oraclePrivateKeyHex !== 'mock') {
+    try {
+      const message = `${matchId}:${status}:${homeScore}:${awayScore}:${totalStats}:${timestamp}`;
+      const msgBuffer = Buffer.from(message, 'utf8');
+      const privateKey = crypto.createPrivateKey({
+        key: Buffer.from(oraclePrivateKeyHex, 'hex'),
+        format: 'der',
+        type: 'pkcs8'
+      });
+      const sign = crypto.createSign('SHA256');
+      sign.update(msgBuffer);
+      return sign.sign(privateKey).toString('hex');
+    } catch (err: any) {
+      console.error('[SSE Multiplexer] Failed to sign oracle event:', err.message);
+    }
+  }
+  return fallbackSignature;
 }
 
 // -------------------------------------------------------------
@@ -167,7 +197,7 @@ function parseRawFixtureToState(item: any): FixtureState {
       awayScore
     },
     totalStats: homeScore + awayScore,
-    lastTickTimestamp: Date.now(),
+    lastTickTimestamp: item.Ts || item.timestamp || item.Update?.Ts || Date.now(),
     homeTeam: addFlagEmojiIfMissing(homeTeam),
     awayTeam: addFlagEmojiIfMissing(awayTeam),
     sport,
@@ -210,9 +240,9 @@ function processTxOddsOracleTick(rawPacketPayload: string): void {
         // 7. STATUS MUTATION:
         if (update.StatusId !== undefined) {
           state.statusId = update.StatusId;
-      }
+        }
       
-      state.lastTickTimestamp = Date.now();
+        state.lastTickTimestamp = payload.Ts || payload.timestamp || update.Ts || Date.now();
     }
 
     // Persist mutated state to cache
@@ -221,6 +251,15 @@ function processTxOddsOracleTick(rawPacketPayload: string): void {
     // 8. BROADCAST:
     // Snapshot state and broadcast to all connected web clients
     const statusStr = state.statusId === 3 ? 'FINISHED' : (state.statusId === 2 ? 'LIVE' : 'SCHEDULED');
+    const signature = signEventIfPossible(
+      state.id,
+      statusStr,
+      state.scores.homeScore,
+      state.scores.awayScore,
+      state.totalStats,
+      state.lastTickTimestamp,
+      payload.signature || update.ServerId || 'txline_verified_signature'
+    );
     const snapshot = {
       matchId: state.id,
       status: statusStr,
@@ -229,7 +268,7 @@ function processTxOddsOracleTick(rawPacketPayload: string): void {
       awayScore: state.scores.awayScore,
       totalStats: state.totalStats,
       timestamp: state.lastTickTimestamp,
-      signature: payload.signature || update.ServerId || 'txline_verified_signature',
+      signature,
       homeTeam: state.homeTeam,
       awayTeam: state.awayTeam,
       kickoffTime: state.kickoffTime,
@@ -656,6 +695,15 @@ export async function GET(req: NextRequest) {
       // Stream the cached states to the client
       globalFixtureCache.forEach(state => {
         const statusStr = state.statusId === 3 ? 'FINISHED' : (state.statusId === 2 ? 'LIVE' : 'SCHEDULED');
+        const signature = signEventIfPossible(
+          state.id,
+          statusStr,
+          state.scores.homeScore,
+          state.scores.awayScore,
+          state.totalStats,
+          state.lastTickTimestamp,
+          'initial_state'
+        );
         const payload = JSON.stringify({
           matchId: state.id,
           status: statusStr,
@@ -664,7 +712,7 @@ export async function GET(req: NextRequest) {
           awayScore: state.scores.awayScore,
           totalStats: state.totalStats,
           timestamp: state.lastTickTimestamp,
-          signature: 'initial_state',
+          signature,
           homeTeam: state.homeTeam,
           awayTeam: state.awayTeam,
           kickoffTime: state.kickoffTime,
