@@ -187,7 +187,7 @@ async function fetchMatchStatsAndEvent(
           
           const timestamp = rawPayload.Ts || rawPayload.timestamp || update.Ts || Date.now();
 
-          const event: TxLineEvent = {
+          const event: TxLineEvent & { sequence?: number } = {
             matchId,
             status: statusStr,
             homeScore,
@@ -197,7 +197,8 @@ async function fetchMatchStatsAndEvent(
             signature: rawPayload.signature || update.ServerId || 'txline_verified_signature',
             eventType: rawPayload.eventType || undefined,
             team: rawPayload.team !== undefined ? rawPayload.team : undefined,
-            matchMinute: rawPayload.matchMinute || undefined
+            matchMinute: rawPayload.matchMinute || undefined,
+            sequence: rawPayload.Sequence ?? update.Sequence ?? rawPayload.seq ?? update.seq ?? undefined
           };
           
           lastEvent = event;
@@ -374,7 +375,7 @@ export async function GET(request: NextRequest) {
 
     // 6. Scan on-chain markets
     reports.push(`[Crank API] Scanning unresolved accounts from Solana...`);
-    const unresolvedPropMarkets = (await program.account.binaryPropMarket.all()).filter((m: any) => !m.account.resolved);
+    const unresolvedPropMarkets = (await program.account.binaryPropMarket.all()).filter((m: any) => !m.account.lifecycle.settled);
     const unresolvedParametricMarkets = (await program.account.parametricMarket.all()).filter((m: any) => !m.account.isResolved);
     
     reports.push(`[Crank API] Found ${unresolvedPropMarkets.length} unresolved Prop Markets and ${unresolvedParametricMarkets.length} standard Parametric Markets.`);
@@ -495,6 +496,14 @@ export async function GET(request: NextRequest) {
           reports.push(`[Crank API] Cryptographic verification failed for parametric market ${m.publicKey.toBase58()} (Match ID: ${matchIdStr}). Skipping resolution.`);
           continue;
         }
+
+        const eventSequence = (finalEvent as any).sequence || 0;
+        const onChainSequence = m.account.sequence.toNumber();
+        if (eventSequence < onChainSequence) {
+          reports.push(`[Crank API] Stale sequence number ${eventSequence} < on-chain sequence ${onChainSequence} for market ${m.publicKey.toBase58()}. Skipping.`);
+          continue;
+        }
+
         let resolvedValue = 0;
         if (m.account.marketType === 0) {
           resolvedValue = finalEvent.totalStats;

@@ -1,13 +1,13 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
-use crate::state::{BinaryPropMarket, PropPosition};
+use crate::state::{BinaryPropMarket, PropPosition, LifecycleState};
 use crate::errors::VeriBetError;
 
 #[derive(Accounts)]
 pub struct PlacePropBet<'info> {
     #[account(
         mut,
-        constraint = !market.resolved @ VeriBetError::MarketAlreadyResolved,
+        constraint = market.lifecycle == LifecycleState::Active @ VeriBetError::MarketAlreadyResolved,
         constraint = market.vault_token_account == vault_token_account.key() @ VeriBetError::InvalidVault
     )]
     pub market: Account<'info, BinaryPropMarket>,
@@ -48,7 +48,7 @@ pub fn handle_place_prop_bet(
     let market = &mut ctx.accounts.market;
 
     // 1. Enforce betting deadline
-    if clock.unix_timestamp >= market.betting_closes_at || !market.bettable {
+    if clock.unix_timestamp >= market.betting_closes_at || !market.bettable || market.lifecycle != LifecycleState::Active {
         return err!(VeriBetError::MarketClosed);
     }
 
@@ -83,11 +83,11 @@ pub fn handle_place_prop_bet(
         .ok_or(VeriBetError::MathOverflow)?;
 
     if side {
-        market.pool_yes = market.pool_yes
+        market.total_yes_pool = market.total_yes_pool
             .checked_add(amount)
             .ok_or(VeriBetError::MathOverflow)?;
     } else {
-        market.pool_no = market.pool_no
+        market.total_no_pool = market.total_no_pool
             .checked_add(amount)
             .ok_or(VeriBetError::MathOverflow)?;
     }
@@ -100,8 +100,8 @@ pub fn handle_place_prop_bet(
         user_position.bettor = ctx.accounts.bettor.key();
         user_position.side = side;
         user_position.amount = amount;
-        user_position.claimed = false;
         user_position.placed_at = clock.unix_timestamp;
+        user_position.claimed = false;
         user_position.bump = ctx.bumps.user_position;
     } else {
         // Existing position

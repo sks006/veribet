@@ -229,7 +229,7 @@ export default function MarketDetailPage({ params }: PageProps) {
 
       for (const m of propMarkets) {
         const keyStr = m.publicKey.toBase58();
-        if (m.account.resolved && !newSigs[keyStr]) {
+        if (m.account.lifecycle.settled && !newSigs[keyStr]) {
           try {
             const sig = await getResolutionTxSig(connection, m.publicKey, true);
             if (sig) {
@@ -977,8 +977,8 @@ export default function MarketDetailPage({ params }: PageProps) {
                 const marketAcc = m.account;
                 const userPos = userPropPositions[keyStr];
                 
-                const yesPoolSol = marketAcc.poolYes.toNumber() / 1e9;
-                const noPoolSol = marketAcc.poolNo.toNumber() / 1e9;
+                const yesPoolSol = marketAcc.totalYesPool.toNumber() / 1e9;
+                const noPoolSol = marketAcc.totalNoPool.toNumber() / 1e9;
                 const totalPropPool = yesPoolSol + noPoolSol;
 
                 return (
@@ -996,7 +996,7 @@ export default function MarketDetailPage({ params }: PageProps) {
                       </div>
 
                       <div className="prop-status-wrapper">
-                        {marketAcc.resolved ? (
+                        {marketAcc.lifecycle.settled ? (
                           <span className={`status-badge-custom resolved-${marketAcc.resolvedValue ? 'yes' : 'no'}`}>
                             RESOLVED: {marketAcc.resolvedValue ? 'YES' : 'NO'}
                           </span>
@@ -1058,7 +1058,7 @@ export default function MarketDetailPage({ params }: PageProps) {
 
                       {/* Actions */}
                       <div className="action-box">
-                        {marketAcc.resolved ? (
+                        {marketAcc.lifecycle.settled ? (
                           <div className="resolved-actions-wrapper">
                             {userPos && !userPos.claimed && (
                               <button

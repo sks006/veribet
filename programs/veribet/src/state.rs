@@ -73,52 +73,64 @@ impl UserPosition {
         4;   // Reference nonce (120 bytes total)
 }
 
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum LifecycleState {
+    Active,
+    OracleLocked,
+    Settled,
+}
+
 #[account]
 pub struct BinaryPropMarket {
-    pub market_id: [u8; 32],
-    pub match_id: [u8; 32],
-    pub event_type: u8,              // 0=Foul, 1=RedCard, 2=YellowCard, 3=Corner, 4=FreeKick
-    pub team: u8,                    // 0=A, 1=B
-    pub comparator: u8,              // 0=CountGte, 1=CountLte, 2=Occurs
-    pub threshold: u16,
-    pub window: u8,                  // 0=FirstHalf, 1=SecondHalf, 2=FullMatch
-    pub display_title: String,       // Max 96 chars (100 bytes serialized)
-    pub creator: Pubkey,
-    pub oracle_authority: Pubkey,
-    pub betting_closes_at: i64,
-    pub bettable: bool,
-    pub pool_yes: u64,
-    pub pool_no: u64,
-    pub crank_gas_rebate_pool: u64,  // Track crank gas rebate pool lamports
-    pub vault_token_account: Pubkey,
-    pub resolved: bool,
-    pub resolved_value: Option<bool>, // Some(true) = YES won, Some(false) = NO won
-    pub proof_hash: [u8; 32],
-    pub emergency_unlock_timestamp: i64,
-    pub bump: u8,
+    // --- Fixed-size fields first (static offsets for memcmp) ---
+    pub market_id: [u8; 32],               // 8 (discriminator)
+    pub match_id: [u8; 32],                // 8 + 32 = 40
+    pub total_yes_pool: u64,               // 40 + 32 = 72
+    pub total_no_pool: u64,                // 72 + 8 = 80
+    pub lifecycle: LifecycleState,         // 80 + 8 = 88
+    pub cryptographic_proof: [u8; 32],     // 88 + 1 = 89
+    pub creator: Pubkey,                   // 89 + 32 = 121
+    pub oracle_authority: Pubkey,          // 121 + 32 = 153
+    pub vault_token_account: Pubkey,       // 153 + 32 = 185
+    pub betting_closes_at: i64,            // 185 + 32 = 217
+    pub emergency_unlock_timestamp: i64,   // 217 + 8 = 225
+    pub crank_gas_rebate_pool: u64,        // 225 + 8 = 233
+    pub threshold: u16,                    // 233 + 8 = 241
+    pub event_type: u8,                    // 241 + 2 = 243
+    pub team: u8,                          // 243 + 1 = 244
+    pub comparator: u8,                    // 244 + 1 = 245
+    pub window: u8,                        // 245 + 1 = 246
+    pub bettable: bool,                    // 246 + 1 = 247
+    pub bump: u8,                          // 247 + 1 = 248
+    
+    // --- Dynamic size fields last ---
+    pub resolved_value: Option<bool>,      // 248 + 1 = 249
+    pub display_title: String,             // 249 + Option<bool> payload
 }
 
 impl BinaryPropMarket {
     pub const LEN: usize = 8 + // Anchor discriminator
         32 + // market_id
         32 + // match_id
+        8 +  // total_yes_pool
+        8 +  // total_no_pool
+        1 +  // lifecycle
+        32 + // cryptographic_proof
+        32 + // creator
+        32 + // oracle_authority
+        32 + // vault_token_account
+        8 +  // betting_closes_at
+        8 +  // emergency_unlock_timestamp
+        8 +  // crank_gas_rebate_pool
+        2 +  // threshold
         1 +  // event_type
         1 +  // team
         1 +  // comparator
-        2 +  // threshold
         1 +  // window
-        100 + // display_title
-        32 + // creator
-        8 +  // betting_closes_at
         1 +  // bettable
-        8 +  // pool_yes
-        8 +  // pool_no
-        32 + // vault_token_account
-        1 +  // resolved
-        2 +  // resolved_value Option<bool>
-        32 + // proof_hash
-        8 +  // emergency_unlock_timestamp
         1 +  // bump
+        2 +  // resolved_value Option<bool>
+        100 + // display_title
         50;  // Safety padding/alignment allowance (360 total space fits this easily)
 }
 

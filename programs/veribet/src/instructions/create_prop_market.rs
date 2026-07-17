@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token, TokenAccount};
-use crate::state::BinaryPropMarket;
+use crate::state::{BinaryPropMarket, LifecycleState};
 use crate::errors::VeriBetError;
 
 #[derive(Accounts)]
@@ -56,7 +56,7 @@ pub struct CloseBettingEarly<'info> {
     #[account(
         mut,
         constraint = market.oracle_authority == oracle_authority.key() @ VeriBetError::Unauthorized,
-        constraint = !market.resolved @ VeriBetError::MarketAlreadyResolved,
+        constraint = market.lifecycle == LifecycleState::Active @ VeriBetError::MarketAlreadyResolved,
         constraint = market.bettable @ VeriBetError::MarketClosed,
     )]
     pub market: Account<'info, BinaryPropMarket>,
@@ -116,12 +116,12 @@ pub fn handle_create_prop_market(
     market.oracle_authority = ctx.accounts.oracle_authority.key();
     market.betting_closes_at = betting_closes_at;
     market.bettable = true;
-    market.pool_yes = 0;
-    market.pool_no = 0;
+    market.total_yes_pool = 0;
+    market.total_no_pool = 0;
     market.vault_token_account = ctx.accounts.vault_token_account.key();
-    market.resolved = false;
+    market.lifecycle = LifecycleState::Active;
     market.resolved_value = None;
-    market.proof_hash = [0u8; 32];
+    market.cryptographic_proof = [0u8; 32];
     
     // Set emergency unlock timestamp to 3 hours after betting closes
     market.emergency_unlock_timestamp = betting_closes_at
@@ -136,5 +136,6 @@ pub fn handle_create_prop_market(
 pub fn handle_close_betting_early(ctx: Context<CloseBettingEarly>) -> Result<()> {
     let market = &mut ctx.accounts.market;
     market.bettable = false;
+    market.lifecycle = LifecycleState::OracleLocked;
     Ok(())
 }

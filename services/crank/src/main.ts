@@ -151,7 +151,7 @@ async function fetchMatchStatsAndEvent(
           
           const timestamp = rawPayload.Ts || rawPayload.timestamp || update.Ts || Date.now();
           
-          const event: TxLineEvent = {
+          const event: TxLineEvent & { sequence?: number } = {
             matchId,
             status: statusStr,
             homeScore,
@@ -161,7 +161,8 @@ async function fetchMatchStatsAndEvent(
             signature: rawPayload.signature || update.ServerId || 'txline_verified_signature',
             eventType: rawPayload.eventType || undefined,
             team: rawPayload.team !== undefined ? rawPayload.team : undefined,
-            matchMinute: rawPayload.matchMinute || undefined
+            matchMinute: rawPayload.matchMinute || undefined,
+            sequence: rawPayload.Sequence ?? update.Sequence ?? rawPayload.seq ?? update.seq ?? undefined
           };
           
           lastEvent = event;
@@ -288,7 +289,7 @@ async function main() {
 
   // 5. Scan on-chain markets
   console.log(`[Crank Main] Scanning unresolved accounts from Solana...`);
-  const unresolvedPropMarkets = (await program.account.binaryPropMarket.all()).filter((m: any) => !m.account.resolved);
+  const unresolvedPropMarkets = (await program.account.binaryPropMarket.all()).filter((m: any) => !m.account.lifecycle.settled);
   const unresolvedParametricMarkets = (await program.account.parametricMarket.all()).filter((m: any) => !m.account.isResolved);
   
   console.log(`[Crank Main] Found ${unresolvedPropMarkets.length} unresolved Prop Markets and ${unresolvedParametricMarkets.length} standard Parametric Markets.`);
@@ -386,6 +387,14 @@ async function main() {
         console.error(`[Crank Main] Cryptographic verification failed for parametric market ${m.publicKey.toBase58()} (Match ID: ${matchIdStr}). Skipping resolution.`);
         continue;
       }
+      
+      const eventSequence = (finalEvent as any).sequence || 0;
+      const onChainSequence = m.account.sequence.toNumber();
+      if (eventSequence < onChainSequence) {
+        console.warn(`[Crank Main] Stale sequence number ${eventSequence} < on-chain sequence ${onChainSequence} for market ${m.publicKey.toBase58()}. Skipping.`);
+        continue;
+      }
+
       const marketIdNum = m.account.marketId.toNumber();
       console.log(`[Crank Main] Resolving parametric market ${m.publicKey.toBase58()} (Market ID: ${marketIdNum})`);
 

@@ -304,11 +304,11 @@ export async function POST(req: NextRequest) {
 
       return NextResponse.json({
         marketAddress: marketPubKey.toBase58(),
-        resolved: marketAcc.resolved,
+        resolved: !!marketAcc.lifecycle.settled,
         resolvedValue: marketAcc.resolvedValue,
         bettable: marketAcc.bettable,
-        poolYes: marketAcc.poolYes.toNumber() / 1e9,
-        poolNo: marketAcc.poolNo.toNumber() / 1e9,
+        poolYes: marketAcc.totalYesPool.toNumber() / 1e9,
+        poolNo: marketAcc.totalNoPool.toNumber() / 1e9,
       });
     }
 

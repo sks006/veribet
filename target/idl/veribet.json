@@ -1034,6 +1034,59 @@
             }
           },
           {
+            "name": "total_yes_pool",
+            "type": "u64"
+          },
+          {
+            "name": "total_no_pool",
+            "type": "u64"
+          },
+          {
+            "name": "lifecycle",
+            "type": {
+              "defined": {
+                "name": "LifecycleState"
+              }
+            }
+          },
+          {
+            "name": "cryptographic_proof",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "oracle_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault_token_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "betting_closes_at",
+            "type": "i64"
+          },
+          {
+            "name": "emergency_unlock_timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "crank_gas_rebate_pool",
+            "type": "u64"
+          },
+          {
+            "name": "threshold",
+            "type": "u16"
+          },
+          {
             "name": "event_type",
             "type": "u8"
           },
@@ -1046,52 +1099,16 @@
             "type": "u8"
           },
           {
-            "name": "threshold",
-            "type": "u16"
-          },
-          {
             "name": "window",
             "type": "u8"
-          },
-          {
-            "name": "display_title",
-            "type": "string"
-          },
-          {
-            "name": "creator",
-            "type": "pubkey"
-          },
-          {
-            "name": "oracle_authority",
-            "type": "pubkey"
-          },
-          {
-            "name": "betting_closes_at",
-            "type": "i64"
           },
           {
             "name": "bettable",
             "type": "bool"
           },
           {
-            "name": "pool_yes",
-            "type": "u64"
-          },
-          {
-            "name": "pool_no",
-            "type": "u64"
-          },
-          {
-            "name": "crank_gas_rebate_pool",
-            "type": "u64"
-          },
-          {
-            "name": "vault_token_account",
-            "type": "pubkey"
-          },
-          {
-            "name": "resolved",
-            "type": "bool"
+            "name": "bump",
+            "type": "u8"
           },
           {
             "name": "resolved_value",
@@ -1100,21 +1117,25 @@
             }
           },
           {
-            "name": "proof_hash",
-            "type": {
-              "array": [
-                "u8",
-                32
-              ]
-            }
+            "name": "display_title",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LifecycleState",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Active"
           },
           {
-            "name": "emergency_unlock_timestamp",
-            "type": "i64"
+            "name": "OracleLocked"
           },
           {
-            "name": "bump",
-            "type": "u8"
+            "name": "Settled"
           }
         ]
       }

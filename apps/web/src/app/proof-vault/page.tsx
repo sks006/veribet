@@ -3,15 +3,29 @@
 import React, { useEffect, useState } from 'react';
 import { useProgram } from '../../hooks/useProgram';
 import { useTxLine } from '../../hooks/useTxLine';
-import { ShieldCheck, Search, ExternalLink, Calendar, Database, Cpu } from 'lucide-react';
+import { ShieldCheck, Search, ExternalLink, Calendar, Database, Cpu, Eye } from 'lucide-react';
 import { formatAddress } from '../../lib/utils';
+import { getResolutionTxSig } from '../../lib/solana';
+import { ProofReceiptModal } from '../../components/common/ProofReceiptModal';
 
 export default function ProofVaultPage() {
-  const { program } = useProgram();
+  const { program, connection } = useProgram();
   const { matches } = useTxLine();
   const [resolvedMarkets, setResolvedMarkets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+
+  // Proof Modal state
+  const [selectedProof, setSelectedProof] = useState<{
+    matchId: string;
+    resolvedValue: number | string;
+    proofHash: string;
+    marketPubKey: string;
+    isProp: boolean;
+  } | null>(null);
+  
+  const [modalTxSig, setModalTxSig] = useState<string>('');
+  const [loadingTxSig, setLoadingTxSig] = useState<boolean>(false);
 
   const fetchResolvedMarkets = async () => {
     if (!program) {
@@ -20,10 +34,37 @@ export default function ProofVaultPage() {
     }
     try {
       setLoading(true);
-      const accounts = await program.account.parametricMarket.all();
-      // Filter for resolved markets only
-      const resolved = accounts.filter((acc: any) => acc.account.isResolved);
-      setResolvedMarkets(resolved);
+      
+      // Query both standard parametric markets and settled prop markets (lifecycle index 2)
+      const [parametricAccounts, propAccounts] = await Promise.all([
+        program.account.parametricMarket.all(),
+        program.account.binaryPropMarket.all([
+          {
+            memcmp: {
+              offset: 88,
+              bytes: "3", // Base58 representation of 0x02 (LifecycleState::Settled)
+            }
+          }
+        ]),
+      ]);
+
+      // Filter standard resolved parametric markets
+      const resolvedParametric = parametricAccounts.filter((acc: any) => acc.account.isResolved);
+      
+      const combined = [
+        ...resolvedParametric.map((m: any) => ({
+          publicKey: m.publicKey,
+          account: m.account,
+          isProp: false,
+        })),
+        ...propAccounts.map((m: any) => ({
+          publicKey: m.publicKey,
+          account: m.account,
+          isProp: true,
+        })),
+      ];
+
+      setResolvedMarkets(combined);
     } catch (e) {
       console.error('Failed to fetch proof vault markets:', e);
     } finally {
@@ -35,8 +76,34 @@ export default function ProofVaultPage() {
     fetchResolvedMarkets();
   }, [program]);
 
+  const handleOpenReceipt = async (market: any, matchId: string, resolvedValueText: string | number, proofHashHex: string) => {
+    setSelectedProof({
+      matchId,
+      resolvedValue: resolvedValueText,
+      proofHash: proofHashHex,
+      marketPubKey: market.publicKey.toBase58(),
+      isProp: market.isProp,
+    });
+    setLoadingTxSig(true);
+    setModalTxSig('');
+    try {
+      const sig = await getResolutionTxSig(connection, market.publicKey, market.isProp);
+      if (sig) {
+        setModalTxSig(sig);
+      } else {
+        setModalTxSig('Not Found on Ledger');
+      }
+    } catch (err) {
+      setModalTxSig('Error Fetching Signature');
+    } finally {
+      setLoadingTxSig(false);
+    }
+  };
+
   const filtered = resolvedMarkets.filter((market: any) => {
-    const matchId = Buffer.from(market.account.matchIdBytes).toString('utf8').replace(/\0/g, '');
+    const matchId = market.isProp
+      ? Buffer.from(market.account.matchId).toString('utf8').replace(/\0/g, '')
+      : Buffer.from(market.account.matchIdBytes).toString('utf8').replace(/\0/g, '');
     
     // Exclude Friendlies matches from prediction pages
     const match = matches.find(m => m.id === matchId);
@@ -49,7 +116,10 @@ export default function ProofVaultPage() {
       }
     }
 
-    const proofHashHex = Buffer.from(market.account.proofHash).toString('hex');
+    const proofHashHex = market.isProp
+      ? Buffer.from(market.account.cryptographicProof).toString('hex')
+      : Buffer.from(market.account.proofHash).toString('hex');
+      
     return matchId.toLowerCase().includes(search.toLowerCase()) || proofHashHex.toLowerCase().includes(search.toLowerCase());
   });
 
@@ -84,9 +154,25 @@ export default function ProofVaultPage() {
       ) : (
         <div className="proofs-list">
           {filtered.map((market: any, idx: number) => {
-            const matchId = Buffer.from(market.account.matchIdBytes).toString('utf8').replace(/\0/g, '');
-            const proofHashHex = Buffer.from(market.account.proofHash).toString('hex');
+            const matchId = market.isProp
+              ? Buffer.from(market.account.matchId).toString('utf8').replace(/\0/g, '')
+              : Buffer.from(market.account.matchIdBytes).toString('utf8').replace(/\0/g, '');
+            const proofHashHex = market.isProp
+              ? Buffer.from(market.account.cryptographicProof).toString('hex')
+              : Buffer.from(market.account.proofHash).toString('hex');
             
+            const displayTitle = market.isProp 
+              ? (market.account.displayTitle || "Binary Prop")
+              : `Parametric Target: ${market.account.targetValue} units`;
+              
+            const resolvedValueText = market.isProp
+              ? (market.account.resolvedValue?.yes ? "YES" : (market.account.resolvedValue?.no ? "NO" : (market.account.resolvedValue ? "YES" : "NO")))
+              : `${market.account.resolvedValue} units`;
+
+            const rebateSol = market.isProp
+              ? (market.account.crankGasRebatePool.toNumber() / 1e9).toFixed(3)
+              : ((market.account.totalFeesCollected.toNumber() || 5000000) / 1e9).toFixed(3);
+
             return (
               <div key={market.publicKey.toBase58()} className="proof-item-card">
                 <div className="proof-item-header">
@@ -95,19 +181,20 @@ export default function ProofVaultPage() {
                     <span className="verified-stamp">
                       <ShieldCheck size={14} className="text-emerald-400" /> Verified On-Chain
                     </span>
+                    {market.isProp && <span className="prop-market-badge">PROP</span>}
                   </div>
                   <span className="market-pda-text">Market PDA: {formatAddress(market.publicKey.toBase58())}</span>
                 </div>
 
                 <div className="proof-item-body">
                   <div className="proof-details-grid">
-                    <div className="grid-item">
-                      <span className="grid-lbl">Parameter Target</span>
-                      <span className="grid-val">{market.account.targetValue} units</span>
+                    <div className="grid-item span-2">
+                      <span className="grid-lbl">Prediction Parameter</span>
+                      <span className="grid-val bold text-slate-800">{displayTitle}</span>
                     </div>
                     <div className="grid-item">
                       <span className="grid-lbl">Resolved Value</span>
-                      <span className="grid-val text-emerald-400 bold">{market.account.resolvedValue} units</span>
+                      <span className="grid-val text-emerald-500 bold">{resolvedValueText}</span>
                     </div>
                     <div className="grid-item span-2">
                       <span className="grid-lbl">SHA-256 Proof Signature</span>
@@ -119,21 +206,44 @@ export default function ProofVaultPage() {
                 <div className="proof-item-footer">
                   <div className="footer-stat">
                     <Cpu size={12} className="text-indigo-400" />
-                    <span>Crank Gas Rebates Paid: {((market.account.totalFeesCollected.toNumber() || 5000000) / 1e9).toFixed(3)} SOL</span>
+                    <span>Crank Gas Rebates Paid: {rebateSol} SOL</span>
                   </div>
-                  <a 
-                    href={`https://explorer.solana.com/address/${market.publicKey.toBase58()}?cluster=devnet`}
-                    target="_blank" 
-                    rel="noreferrer"
-                    className="audit-link"
-                  >
-                    Audit Ledger <ExternalLink size={12} />
-                  </a>
+                  <div className="actions-row">
+                    <button 
+                      onClick={() => handleOpenReceipt(market, matchId, resolvedValueText, proofHashHex)}
+                      className="receipt-btn"
+                    >
+                      <Eye size={12} /> Inspect Proof
+                    </button>
+                    <a 
+                      href={`https://explorer.solana.com/address/${market.publicKey.toBase58()}?cluster=devnet`}
+                      target="_blank" 
+                      rel="noreferrer"
+                      className="audit-link"
+                    >
+                      Audit Ledger <ExternalLink size={12} />
+                    </a>
+                  </div>
                 </div>
               </div>
             );
           })}
         </div>
+      )}
+
+      {selectedProof && (
+        <ProofReceiptModal
+          isOpen={!!selectedProof}
+          onClose={() => setSelectedProof(null)}
+          matchId={selectedProof.matchId}
+          resolvedValue={
+            typeof selectedProof.resolvedValue === 'number' 
+              ? selectedProof.resolvedValue 
+              : (selectedProof.resolvedValue.toString().includes('YES') ? 1 : 0)
+          }
+          proofHash={selectedProof.proofHash}
+          txSig={loadingTxSig ? 'Fetching...' : modalTxSig}
+        />
       )}
 
       <style jsx>{`
@@ -231,6 +341,16 @@ export default function ProofVaultPage() {
           color: #059669;
         }
 
+        .prop-market-badge {
+          background: rgba(99, 102, 241, 0.1);
+          border: 1px solid rgba(99, 102, 241, 0.2);
+          color: #4f46e5;
+          font-size: 0.65rem;
+          font-weight: 700;
+          padding: 0.15rem 0.4rem;
+          border-radius: 4px;
+        }
+
         .market-pda-text {
           font-size: 0.75rem;
           color: #64748b;
@@ -302,6 +422,32 @@ export default function ProofVaultPage() {
           display: flex;
           align-items: center;
           gap: 0.4rem;
+        }
+
+        .actions-row {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+        }
+
+        .receipt-btn {
+          background: #09090b;
+          border: 1px solid #09090b;
+          color: #ffffff;
+          padding: 0.35rem 0.75rem;
+          border-radius: 8px;
+          font-size: 0.75rem;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+        }
+
+        .receipt-btn:hover {
+          background: #27272a;
+          border-color: #27272a;
         }
 
         .audit-link {

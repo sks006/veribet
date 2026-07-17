@@ -32,7 +32,14 @@ export default function DashboardPage() {
       setLoadingMarkets(true);
       const [accounts, propAccounts] = await Promise.all([
         program.account.parametricMarket.all(),
-        program.account.binaryPropMarket.all(),
+        program.account.binaryPropMarket.all([
+          {
+            memcmp: {
+              offset: 88,
+              bytes: "1", // Base58 representation of 0x00 (LifecycleState::Active)
+            }
+          }
+        ]),
       ]);
       setOnChainMarkets(accounts);
       setPropMarkets(propAccounts);
@@ -259,11 +266,11 @@ export default function DashboardPage() {
                         <div className="pool-data">
                           <div className="pool-row">
                             <span className='text-green-500'>YES Pool</span>
-                            <span className="pool-value">{(market.account.poolYes.toNumber() / 1e9).toFixed(3)} SOL</span>
+                            <span className="pool-value">{(market.account.totalYesPool.toNumber() / 1e9).toFixed(3)} SOL</span>
                           </div>
                           <div className="pool-row">
                             <span className='text-red-500'>NO Pool</span>
-                            <span className="pool-value">{(market.account.poolNo.toNumber() / 1e9).toFixed(3)} SOL</span>
+                            <span className="pool-value">{(market.account.totalNoPool.toNumber() / 1e9).toFixed(3)} SOL</span>
                           </div>
                         </div>
                       </div>

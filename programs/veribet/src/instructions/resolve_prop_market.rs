@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Token, TokenAccount, Transfer};
-use crate::state::{BinaryPropMarket, PropPosition};
+use crate::state::{BinaryPropMarket, PropPosition, LifecycleState};
 use crate::errors::VeriBetError;
 
 #[derive(Accounts)]
@@ -8,7 +8,7 @@ pub struct ResolvePropMarket<'info> {
     #[account(
         mut,
         constraint = market.oracle_authority == oracle_authority.key() @ VeriBetError::Unauthorized,
-        constraint = !market.resolved @ VeriBetError::MarketAlreadyResolved,
+        constraint = market.lifecycle != LifecycleState::Settled @ VeriBetError::MarketAlreadyResolved,
         constraint = market.vault_token_account == vault_token_account.key() @ VeriBetError::InvalidVault
     )]
     pub market: Account<'info, BinaryPropMarket>,
@@ -32,7 +32,7 @@ pub struct ResolvePropMarket<'info> {
 #[derive(Accounts)]
 pub struct ClaimPropPosition<'info> {
     #[account(
-        constraint = market.resolved @ VeriBetError::MarketNotResolved,
+        constraint = market.lifecycle == LifecycleState::Settled @ VeriBetError::MarketNotResolved,
         constraint = market.vault_token_account == vault_token_account.key() @ VeriBetError::InvalidVault
     )]
     pub market: Account<'info, BinaryPropMarket>,
@@ -70,13 +70,13 @@ pub fn handle_resolve_prop_market(
 ) -> Result<()> {
     let market = &mut ctx.accounts.market;
 
-    market.resolved = true;
+    market.lifecycle = LifecycleState::Settled;
     market.resolved_value = Some(resolved_value);
-    market.proof_hash = proof_hash;
+    market.cryptographic_proof = proof_hash;
 
     // Calculate total pool and fees
-    let total_pool = market.pool_yes
-        .checked_add(market.pool_no)
+    let total_pool = market.total_yes_pool
+        .checked_add(market.total_no_pool)
         .ok_or(VeriBetError::MathOverflow)?;
 
     if total_pool > 0 {
@@ -140,17 +140,17 @@ pub fn handle_claim_prop_position(ctx: Context<ClaimPropPosition>) -> Result<()>
     let market = &ctx.accounts.market;
     let user_position = &mut ctx.accounts.user_position;
 
-    let total_pool = market.pool_yes
-        .checked_add(market.pool_no)
+    let total_pool = market.total_yes_pool
+        .checked_add(market.total_no_pool)
         .ok_or(VeriBetError::MathOverflow)?;
 
     let winning_side = market.resolved_value.ok_or(VeriBetError::MarketNotResolved)?;
 
     // Calculate payout
-    let payout_amount = if winning_side && market.pool_yes == 0 {
+    let payout_amount = if winning_side && market.total_yes_pool == 0 {
         // Nobody bet YES, refund stake
         user_position.amount
-    } else if !winning_side && market.pool_no == 0 {
+    } else if !winning_side && market.total_no_pool == 0 {
         // Nobody bet NO, refund stake
         user_position.amount
     } else {
@@ -167,7 +167,7 @@ pub fn handle_claim_prop_position(ctx: Context<ClaimPropPosition>) -> Result<()>
                 .checked_sub(fee)
                 .ok_or(VeriBetError::MathOverflow)?;
 
-            let winning_pool = if winning_side { market.pool_yes } else { market.pool_no };
+            let winning_pool = if winning_side { market.total_yes_pool } else { market.total_no_pool };
 
             // user_share = (user_amount * total_pool_after_fee) / winning_pool
             let numerator = (user_position.amount as u128)
